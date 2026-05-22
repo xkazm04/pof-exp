@@ -24,9 +24,12 @@ public:
 	void BindEnemy(class UAbilitySystemComponent* ASC, const FString& EnemyName);
 
 protected:
-	virtual void NativeConstruct() override;
+	/** Build the widget tree here — runs before the Slate tree is constructed,
+	 *  unlike NativeConstruct() which runs too late for WidgetTree mutation. */
+	virtual TSharedRef<class SWidget> RebuildWidget() override;
 
 private:
+	void BuildTree();
 	void OnPlayerHealthChanged(const FOnAttributeChangeData& Data);
 	void OnPlayerMaxHealthChanged(const FOnAttributeChangeData& Data);
 	void OnEnemyHealthChanged(const FOnAttributeChangeData& Data);

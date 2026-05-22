@@ -6,18 +6,53 @@
 #include "Components/CanvasPanelSlot.h"
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
+#include "Components/Border.h"
 #include "Styling/CoreStyle.h"
+#include "Styling/SlateBrush.h"
 
-void UVSHUDWidget::NativeConstruct()
+namespace
 {
-	Super::NativeConstruct();
-
-	if (!WidgetTree)
+	/** A solid-colour brush usable as a ProgressBar background/fill or Border image. */
+	FSlateBrush MakeSolidBrush(const FLinearColor& Colour)
 	{
+		FSlateBrush Brush;
+		Brush.TintColor = FSlateColor(Colour);
+		Brush.DrawAs = ESlateBrushDrawType::Box;
+		Brush.ImageSize = FVector2D(16.f, 16.f);
+		return Brush;
+	}
+
+	/** Build a ProgressBar style with an explicit dark track + bright fill so the
+	 *  bar is clearly visible at any percent (the engine default has a transparent
+	 *  background image, which makes an empty/low bar invisible). */
+	FProgressBarStyle MakeBarStyle(const FLinearColor& FillColour)
+	{
+		FProgressBarStyle Style;
+		Style.BackgroundImage = MakeSolidBrush(FLinearColor(0.04f, 0.04f, 0.05f, 0.85f));
+		Style.FillImage       = MakeSolidBrush(FillColour);
+		Style.MarqueeImage    = MakeSolidBrush(FillColour);
+		Style.EnableFillAnimation = false;
+		return Style;
+	}
+}
+
+TSharedRef<SWidget> UVSHUDWidget::RebuildWidget()
+{
+	// Build the tree BEFORE the Slate widget is constructed. NativeConstruct()
+	// runs after the Slate tree already exists, so mutating WidgetTree there has
+	// no visible effect — that was why the bars never rendered.
+	BuildTree();
+	return Super::RebuildWidget();
+}
+
+void UVSHUDWidget::BuildTree()
+{
+	if (!WidgetTree || PlayerHealthBar)
+	{
+		// Already built, or no tree to build into.
 		return;
 	}
 
-	// Build the widget tree entirely in C++ — mirrors UBossHealthBarWidget::BuildWidget().
 	UCanvasPanel* Canvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), FName(TEXT("VSHUDRoot")));
 	WidgetTree->RootWidget = Canvas;
 	if (!Canvas)
@@ -26,18 +61,29 @@ void UVSHUDWidget::NativeConstruct()
 	}
 
 	const FSlateFontInfo LabelFont = FCoreStyle::GetDefaultFontStyle("Bold", 16);
-	const FSlateFontInfo ValueFont = FCoreStyle::GetDefaultFontStyle("Regular", 13);
+	const FSlateFontInfo ValueFont = FCoreStyle::GetDefaultFontStyle("Bold", 14);
+
+	const FLinearColor PlayerFill(0.15f, 0.85f, 0.25f);
+	const FLinearColor EnemyFill(0.9f, 0.13f, 0.13f);
+	const FSlateBrush FrameBrush = MakeSolidBrush(FLinearColor(0.f, 0.f, 0.f, 0.7f));
 
 	// --- Player block: anchored top-left ---
-	PlayerHealthBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), FName(TEXT("PlayerHealthBar")));
-	PlayerHealthBar->SetFillColorAndOpacity(FLinearColor(0.15f, 0.8f, 0.25f));
-	PlayerHealthBar->SetPercent(1.f);
-	if (UCanvasPanelSlot* PlayerBarSlot = Cast<UCanvasPanelSlot>(Canvas->AddChildToCanvas(PlayerHealthBar)))
+	// A Border gives the bar a dark frame so its bounds are obvious on any scene.
+	UBorder* PlayerFrame = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), FName(TEXT("PlayerFrame")));
+	PlayerFrame->SetBrush(FrameBrush);
+	PlayerFrame->SetPadding(FMargin(3.f));
+	if (UCanvasPanelSlot* FrameSlot = Cast<UCanvasPanelSlot>(Canvas->AddChildToCanvas(PlayerFrame)))
 	{
-		PlayerBarSlot->SetAnchors(FAnchors(0.f, 0.f));
-		PlayerBarSlot->SetPosition(FVector2D(40.f, 40.f));
-		PlayerBarSlot->SetSize(FVector2D(260.f, 22.f));
+		FrameSlot->SetAnchors(FAnchors(0.f, 0.f));
+		FrameSlot->SetPosition(FVector2D(40.f, 90.f));
+		FrameSlot->SetSize(FVector2D(286.f, 28.f));
 	}
+
+	PlayerHealthBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), FName(TEXT("PlayerHealthBar")));
+	PlayerHealthBar->SetWidgetStyle(MakeBarStyle(PlayerFill));
+	PlayerHealthBar->SetFillColorAndOpacity(PlayerFill);
+	PlayerHealthBar->SetPercent(1.f);
+	PlayerFrame->SetContent(PlayerHealthBar);
 
 	PlayerHealthText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), FName(TEXT("PlayerHealthText")));
 	PlayerHealthText->SetFont(ValueFont);
@@ -46,7 +92,7 @@ void UVSHUDWidget::NativeConstruct()
 	if (UCanvasPanelSlot* PlayerTextSlot = Cast<UCanvasPanelSlot>(Canvas->AddChildToCanvas(PlayerHealthText)))
 	{
 		PlayerTextSlot->SetAnchors(FAnchors(0.f, 0.f));
-		PlayerTextSlot->SetPosition(FVector2D(40.f, 64.f));
+		PlayerTextSlot->SetPosition(FVector2D(44.f, 122.f));
 		PlayerTextSlot->SetAutoSize(true);
 	}
 
@@ -60,20 +106,26 @@ void UVSHUDWidget::NativeConstruct()
 	{
 		EnemyNameSlot->SetAnchors(FAnchors(0.5f, 0.f));
 		EnemyNameSlot->SetAlignment(FVector2D(0.5f, 0.f));
-		EnemyNameSlot->SetPosition(FVector2D(0.f, 32.f));
+		EnemyNameSlot->SetPosition(FVector2D(0.f, 36.f));
 		EnemyNameSlot->SetAutoSize(true);
 	}
 
-	EnemyHealthBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), FName(TEXT("EnemyHealthBar")));
-	EnemyHealthBar->SetFillColorAndOpacity(FLinearColor(0.85f, 0.12f, 0.12f));
-	EnemyHealthBar->SetPercent(1.f);
-	if (UCanvasPanelSlot* EnemyBarSlot = Cast<UCanvasPanelSlot>(Canvas->AddChildToCanvas(EnemyHealthBar)))
+	UBorder* EnemyFrame = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), FName(TEXT("EnemyFrame")));
+	EnemyFrame->SetBrush(FrameBrush);
+	EnemyFrame->SetPadding(FMargin(3.f));
+	if (UCanvasPanelSlot* EnemyFrameSlot = Cast<UCanvasPanelSlot>(Canvas->AddChildToCanvas(EnemyFrame)))
 	{
-		EnemyBarSlot->SetAnchors(FAnchors(0.5f, 0.f));
-		EnemyBarSlot->SetAlignment(FVector2D(0.5f, 0.f));
-		EnemyBarSlot->SetPosition(FVector2D(0.f, 54.f));
-		EnemyBarSlot->SetSize(FVector2D(360.f, 20.f));
+		EnemyFrameSlot->SetAnchors(FAnchors(0.5f, 0.f));
+		EnemyFrameSlot->SetAlignment(FVector2D(0.5f, 0.f));
+		EnemyFrameSlot->SetPosition(FVector2D(0.f, 62.f));
+		EnemyFrameSlot->SetSize(FVector2D(380.f, 28.f));
 	}
+
+	EnemyHealthBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), FName(TEXT("EnemyHealthBar")));
+	EnemyHealthBar->SetWidgetStyle(MakeBarStyle(EnemyFill));
+	EnemyHealthBar->SetFillColorAndOpacity(EnemyFill);
+	EnemyHealthBar->SetPercent(1.f);
+	EnemyFrame->SetContent(EnemyHealthBar);
 
 	EnemyHealthText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), FName(TEXT("EnemyHealthText")));
 	EnemyHealthText->SetFont(ValueFont);
@@ -84,7 +136,7 @@ void UVSHUDWidget::NativeConstruct()
 	{
 		EnemyTextSlot->SetAnchors(FAnchors(0.5f, 0.f));
 		EnemyTextSlot->SetAlignment(FVector2D(0.5f, 0.f));
-		EnemyTextSlot->SetPosition(FVector2D(0.f, 76.f));
+		EnemyTextSlot->SetPosition(FVector2D(0.f, 94.f));
 		EnemyTextSlot->SetAutoSize(true);
 	}
 }

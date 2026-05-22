@@ -16,7 +16,9 @@ void AVSHUD::BeginPlay()
 	HUDWidget = CreateWidget<UVSHUDWidget>(GetWorld(), UVSHUDWidget::StaticClass());
 	if (HUDWidget)
 	{
-		HUDWidget->AddToViewport();
+		// Z-order 30 keeps the slice bars above the main ARPG HUD widgets
+		// (which add at Z-order 0-15). On-screen debug text always draws above.
+		HUDWidget->AddToViewport(30);
 		UE_LOG(LogTemp, Log, TEXT("[VSHUD] HUD widget created"));
 	}
 	else
