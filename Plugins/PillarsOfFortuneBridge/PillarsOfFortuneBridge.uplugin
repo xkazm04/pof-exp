@@ -1,0 +1,24 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "Pillars of Fortune Bridge",
+  "Description": "Deep bidirectional integration between PoF web app and UE5 Editor",
+  "Category": "Editor",
+  "CreatedBy": "PoF Team",
+  "EnabledByDefault": true,
+  "CanContainContent": false,
+  "IsBetaVersion": true,
+  "Modules": [
+    {
+      "Name": "PillarsOfFortuneBridge",
+      "Type": "Runtime",
+      "LoadingPhase": "PostEngineInit"
+    },
+    {
+      "Name": "PillarsOfFortuneBridgeEditor",
+      "Type": "EditorNoCommandlet",
+      "LoadingPhase": "PostEngineInit"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+# Unreal Engine project — .gitignore (best-practice)
+# Generated / build output — never committed; regenerated locally.
+
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# Per-plugin build output
+Plugins/**/Binaries/
+Plugins/**/Intermediate/
+
+# IDE / build files (the .sln is regenerated from the .uproject)
+.vs/
+.vscode/
+.idea/
+*.sln
+*.suo
+*.opensdf
+*.opendb
+*.sdf
+*.VC.db
+*.VC.opendb
+*.xcodeproj
+*.xcworkspace
+
+# OS / stray files
+nul
+Thumbs.db
+.DS_Store
+
+# Local tooling state — not part of the UE project
+.claude/
+.harness/
+.pof/

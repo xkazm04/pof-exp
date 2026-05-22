@@ -1,0 +1,265 @@
+#include "UI/ARPGHUDWidget.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystem/ARPGAttributeSet.h"
+#include "Player/ARPGPlayerCharacter.h"
+#include "Components/ProgressBar.h"
+#include "Components/TextBlock.h"
+#include "Components/Border.h"
+
+void UARPGHUDWidget::NativeConstruct()
+{
+	Super::NativeConstruct();
+
+	// Set initial bar colors
+	if (HealthBar)
+	{
+		HealthBar->SetFillColorAndOpacity(HealthBarColor);
+	}
+	if (ManaBar)
+	{
+		ManaBar->SetFillColorAndOpacity(ManaBarColor);
+	}
+	if (StaminaBar)
+	{
+		StaminaBar->SetFillColorAndOpacity(StaminaBarColor);
+	}
+	if (XPBar)
+	{
+		XPBar->SetFillColorAndOpacity(XPBarColor);
+		XPBar->SetPercent(0.f);
+	}
+}
+
+void UARPGHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	// --- Smooth bar interpolation ---
+	const float TargetHealthPercent = CurrentMaxHealth > 0.f ? CurrentHealth / CurrentMaxHealth : 0.f;
+	const float TargetManaPercent = CurrentMaxMana > 0.f ? CurrentMana / CurrentMaxMana : 0.f;
+
+	DisplayedHealthPercent = FMath::FInterpTo(DisplayedHealthPercent, TargetHealthPercent, InDeltaTime, BarInterpSpeed);
+	DisplayedManaPercent = FMath::FInterpTo(DisplayedManaPercent, TargetManaPercent, InDeltaTime, BarInterpSpeed);
+
+	if (HealthBar)
+	{
+		HealthBar->SetPercent(DisplayedHealthPercent);
+	}
+	if (ManaBar)
+	{
+		ManaBar->SetPercent(DisplayedManaPercent);
+	}
+
+	// --- Stamina (polled from player character, not GAS) ---
+	if (AARPGPlayerCharacter* Player = BoundPlayer.Get())
+	{
+		const float TargetStamina = Player->GetStaminaRatio();
+		DisplayedStaminaPercent = FMath::FInterpTo(DisplayedStaminaPercent, TargetStamina, InDeltaTime, BarInterpSpeed);
+		if (StaminaBar)
+		{
+			StaminaBar->SetPercent(DisplayedStaminaPercent);
+		}
+
+		// XP bar (smooth)
+		const float TargetXP = Player->GetExperiencePercent();
+		DisplayedXPPercent = FMath::FInterpTo(DisplayedXPPercent, TargetXP, InDeltaTime, BarInterpSpeed);
+		if (XPBar)
+		{
+			XPBar->SetPercent(DisplayedXPPercent);
+		}
+	}
+
+	// --- Low health pulse ---
+	// Drive the pulse off the interpolated (displayed) percent so the bar's
+	// fill and its warning color stay visually in sync.
+	if (DisplayedHealthPercent < LowHealthThreshold && DisplayedHealthPercent > 0.f)
+	{
+		PulseTime += InDeltaTime;
+		// Sine wave oscillation between 0 and 1
+		const float Alpha = (FMath::Sin(PulseTime * LowHealthPulseSpeed * 2.f * PI) + 1.f) * 0.5f;
+		// Pulse between a dim and a bright red so the bar reads as a clear
+		// "low health" warning rather than flashing the normal bar color.
+		const FLinearColor DimLowHealthColor = LowHealthColor * 0.35f;
+		FLinearColor PulsedColor = FMath::Lerp(DimLowHealthColor, LowHealthColor, Alpha);
+		PulsedColor.A = 1.f;
+		if (HealthBar)
+		{
+			HealthBar->SetFillColorAndOpacity(PulsedColor);
+		}
+	}
+	else
+	{
+		PulseTime = 0.f;
+		if (HealthBar)
+		{
+			HealthBar->SetFillColorAndOpacity(HealthBarColor);
+		}
+	}
+}
+
+void UARPGHUDWidget::NativeDestruct()
+{
+	UnbindFromAbilitySystem();
+	BoundPlayer = nullptr;
+	Super::NativeDestruct();
+}
+
+void UARPGHUDWidget::BindToAbilitySystem(UAbilitySystemComponent* ASC)
+{
+	// Unbind from any previous ASC
+	UnbindFromAbilitySystem();
+
+	if (!ASC) return;
+
+	BoundASC = ASC;
+
+	// Bind to attribute change delegates
+	ASC->GetGameplayAttributeValueChangeDelegate(UARPGAttributeSet::GetHealthAttribute())
+		.AddUObject(this, &UARPGHUDWidget::OnHealthChanged);
+
+	ASC->GetGameplayAttributeValueChangeDelegate(UARPGAttributeSet::GetMaxHealthAttribute())
+		.AddUObject(this, &UARPGHUDWidget::OnMaxHealthChanged);
+
+	ASC->GetGameplayAttributeValueChangeDelegate(UARPGAttributeSet::GetManaAttribute())
+		.AddUObject(this, &UARPGHUDWidget::OnManaChanged);
+
+	ASC->GetGameplayAttributeValueChangeDelegate(UARPGAttributeSet::GetMaxManaAttribute())
+		.AddUObject(this, &UARPGHUDWidget::OnMaxManaChanged);
+
+	// Read current values so the HUD is correct immediately
+	bool bFound = false;
+	CurrentHealth = ASC->GetGameplayAttributeValue(UARPGAttributeSet::GetHealthAttribute(), bFound);
+	if (!bFound) CurrentHealth = 0.f;
+
+	CurrentMaxHealth = ASC->GetGameplayAttributeValue(UARPGAttributeSet::GetMaxHealthAttribute(), bFound);
+	if (!bFound) CurrentMaxHealth = 1.f;
+
+	CurrentMana = ASC->GetGameplayAttributeValue(UARPGAttributeSet::GetManaAttribute(), bFound);
+	if (!bFound) CurrentMana = 0.f;
+
+	CurrentMaxMana = ASC->GetGameplayAttributeValue(UARPGAttributeSet::GetMaxManaAttribute(), bFound);
+	if (!bFound) CurrentMaxMana = 1.f;
+
+	// Snap displayed values immediately (no interpolation on init)
+	DisplayedHealthPercent = CurrentMaxHealth > 0.f ? CurrentHealth / CurrentMaxHealth : 0.f;
+	DisplayedManaPercent = CurrentMaxMana > 0.f ? CurrentMana / CurrentMaxMana : 0.f;
+
+	UpdateHealthDisplay();
+	UpdateManaDisplay();
+}
+
+void UARPGHUDWidget::BindToPlayerCharacter(AARPGPlayerCharacter* Player)
+{
+	if (!Player) return;
+
+	BoundPlayer = Player;
+
+	// Bind level-up delegate for level display updates
+	Player->OnPlayerLevelUp.AddDynamic(this, &UARPGHUDWidget::OnPlayerLevelUp);
+
+	// Snap stamina and XP immediately
+	DisplayedStaminaPercent = Player->GetStaminaRatio();
+	DisplayedXPPercent = Player->GetExperiencePercent();
+
+	if (StaminaBar)
+	{
+		StaminaBar->SetPercent(DisplayedStaminaPercent);
+	}
+	if (XPBar)
+	{
+		XPBar->SetPercent(DisplayedXPPercent);
+	}
+
+	UpdateLevelDisplay();
+}
+
+// ---------------------------------------------------------------------------
+// GAS attribute change callbacks
+// ---------------------------------------------------------------------------
+
+void UARPGHUDWidget::OnHealthChanged(const FOnAttributeChangeData& Data)
+{
+	CurrentHealth = Data.NewValue;
+	UpdateHealthDisplay();
+}
+
+void UARPGHUDWidget::OnMaxHealthChanged(const FOnAttributeChangeData& Data)
+{
+	CurrentMaxHealth = FMath::Max(Data.NewValue, 1.f);
+	UpdateHealthDisplay();
+}
+
+void UARPGHUDWidget::OnManaChanged(const FOnAttributeChangeData& Data)
+{
+	CurrentMana = Data.NewValue;
+	UpdateManaDisplay();
+}
+
+void UARPGHUDWidget::OnMaxManaChanged(const FOnAttributeChangeData& Data)
+{
+	CurrentMaxMana = FMath::Max(Data.NewValue, 1.f);
+	UpdateManaDisplay();
+}
+
+void UARPGHUDWidget::OnPlayerLevelUp(int32 NewLevel)
+{
+	UpdateLevelDisplay();
+
+	// Snap XP bar to 0 on level-up (XP was consumed)
+	DisplayedXPPercent = 0.f;
+	if (XPBar)
+	{
+		XPBar->SetPercent(0.f);
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Display update helpers
+// ---------------------------------------------------------------------------
+
+void UARPGHUDWidget::UpdateHealthDisplay()
+{
+	if (HealthText)
+	{
+		HealthText->SetText(FText::FromString(
+			FString::Printf(TEXT("%.0f / %.0f"), CurrentHealth, CurrentMaxHealth)));
+	}
+	// Bar percent is driven by NativeTick interpolation — no snap here
+}
+
+void UARPGHUDWidget::UpdateManaDisplay()
+{
+	if (ManaText)
+	{
+		ManaText->SetText(FText::FromString(
+			FString::Printf(TEXT("%.0f / %.0f"), CurrentMana, CurrentMaxMana)));
+	}
+}
+
+void UARPGHUDWidget::UpdateLevelDisplay()
+{
+	if (!LevelText) return;
+
+	if (AARPGPlayerCharacter* Player = BoundPlayer.Get())
+	{
+		LevelText->SetText(FText::FromString(
+			FString::Printf(TEXT("Lv %d"), Player->GetPlayerLevel())));
+	}
+}
+
+void UARPGHUDWidget::UnbindFromAbilitySystem()
+{
+	UAbilitySystemComponent* ASC = BoundASC.Get();
+	if (!ASC) return;
+
+	ASC->GetGameplayAttributeValueChangeDelegate(UARPGAttributeSet::GetHealthAttribute())
+		.RemoveAll(this);
+	ASC->GetGameplayAttributeValueChangeDelegate(UARPGAttributeSet::GetMaxHealthAttribute())
+		.RemoveAll(this);
+	ASC->GetGameplayAttributeValueChangeDelegate(UARPGAttributeSet::GetManaAttribute())
+		.RemoveAll(this);
+	ASC->GetGameplayAttributeValueChangeDelegate(UARPGAttributeSet::GetMaxManaAttribute())
+		.RemoveAll(this);
+
+	BoundASC = nullptr;
+}
