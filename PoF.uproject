@@ -51,6 +51,10 @@
 		{
 			"Name": "GameplayStateTree",
 			"Enabled": true
+		},
+		{
+			"Name": "MoverTests",
+			"Enabled": true
 		}
 	]
 }
