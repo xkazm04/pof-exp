@@ -336,9 +336,17 @@ def ensure_enemy_red_material():
     color = unreal.LinearColor(r, g, b, 1.0)
     node.set_editor_property("constant", color)
 
-    # Wire the node's RGB output to the material's Base Color input.
-    # Constant3Vector exposes its output as "RGB" (same pin name as TextureSample).
-    mat_lib.connect_material_property(node, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
+    # Wire the node's output to the material's Base Color input.
+    # IMPORTANT: MaterialExpressionConstant3Vector output pin name is "" (empty
+    # string), NOT "RGB". Using "RGB" silently returns False and leaves the
+    # material unconnected (all black). Verified via diag_pin_names.py.
+    mat_lib.connect_material_property(node, "", unreal.MaterialProperty.MP_BASE_COLOR)
+
+    # Add a strong emissive so the enemy glows red regardless of scene lighting.
+    emissive_node = mat_lib.create_material_expression(
+        material, unreal.MaterialExpressionConstant3Vector, -300, 100)
+    emissive_node.set_editor_property("constant", unreal.LinearColor(3.0, 0.0, 0.0, 1.0))
+    mat_lib.connect_material_property(emissive_node, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
 
     # Required for the material to render on SkeletalMesh actors at runtime;
     # without this flag UE falls back to the default grey material in-game.
@@ -346,7 +354,7 @@ def ensure_enemy_red_material():
 
     mat_lib.recompile_material(material)
     asset_lib.save_asset(M_ENEMY_RED_PATH)
-    _log("Created and saved M_EnemyRed material: " + M_ENEMY_RED_PATH)
+    _log("Created and saved M_EnemyRed material (base+emissive, used_with_skeletal_mesh=True)")
     return material
 
 
