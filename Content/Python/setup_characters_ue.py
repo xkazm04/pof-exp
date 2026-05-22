@@ -44,6 +44,11 @@ ABP_MANNY_CLASS = "/MoverTests/Characters/Mannequins/Animations/ABP_Manny.ABP_Ma
 MI_MANNY_01_PATH = "/MoverTests/Characters/Mannequins/Materials/Instances/Manny/MI_Manny_01"
 MI_MANNY_02_PATH = "/MoverTests/Characters/Mannequins/Materials/Instances/Manny/MI_Manny_02"
 
+# Red material for the enemy – a plain base-colour material that makes the
+# enemy obviously distinct from the silver/grey player mannequin.
+M_ENEMY_RED_PATH = "/Game/VerticalSlice/M_EnemyRed"
+ENEMY_RED_RGB = (0.7, 0.04, 0.04)  # strong red in linear colour space
+
 # Standard mannequin offset (matches the C++ character's hardcoded values).
 MANNEQUIN_OFFSET_LOCATION = unreal.Vector(0.0, 0.0, -90.0)
 MANNEQUIN_OFFSET_ROTATION = unreal.Rotator(0.0, 0.0, -90.0)  # (roll, pitch, yaw)
@@ -251,7 +256,13 @@ def configure_mesh_component(mesh_comp, skeletal_mesh, anim_class, bp_name):
 
 
 def apply_material_override(mesh_comp, material, bp_name):
-    """Override every material slot on the mesh component with `material`."""
+    """Override every material slot on the mesh component with `material`.
+
+    Strategy: set override_materials on both the component template (subobject
+    data handle) AND on the CDO-level component obtained via get_default_object.
+    The CDO-level write is the one UE actually serialises for inherited (native
+    C++) components.
+    """
     skel_mesh = None
     try:
         skel_mesh = mesh_comp.get_editor_property("skeletal_mesh_asset")
@@ -266,12 +277,77 @@ def apply_material_override(mesh_comp, material, bp_name):
         except Exception:
             num_slots = 0
     if num_slots == 0:
-        # SKM_Manny_Simple has at least one slot; default to 1.
         num_slots = 1
 
+    # --- Write 1: component template (subobject data handle path) ---
+    override_list = [material] * num_slots
+    try:
+        mesh_comp.set_editor_property("override_materials", override_list)
+        _log("%s: override_materials set on template component (%d slot(s))"
+             % (bp_name, num_slots))
+    except Exception as e:
+        _log("%s: template set_editor_property(override_materials) failed: %s"
+             % (bp_name, str(e)))
+
     for idx in range(num_slots):
-        mesh_comp.set_material(idx, material)
+        try:
+            mesh_comp.set_material(idx, material)
+        except Exception:
+            pass
+
     _log("%s: material override applied to %d slot(s)" % (bp_name, num_slots))
+
+
+# ---------------------------------------------------------------------------
+# Enemy red material (idempotent create)
+# ---------------------------------------------------------------------------
+
+def ensure_enemy_red_material():
+    """
+    Create /Game/VerticalSlice/M_EnemyRed if it does not already exist,
+    then return the loaded Material object.
+
+    The material is a single MaterialExpressionConstant3Vector node with
+    RGB = ENEMY_RED_RGB, wired to MP_BASE_COLOR.  Rebuilding is skipped when
+    the asset is already present so the function is idempotent.
+    """
+    asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+    mat_lib = unreal.MaterialEditingLibrary
+
+    if asset_lib.does_asset_exist(M_ENEMY_RED_PATH):
+        # Delete and rebuild so the material graph is always clean and correct.
+        asset_lib.delete_asset(M_ENEMY_RED_PATH)
+        _log("M_EnemyRed existed – deleted for clean rebuild: " + M_ENEMY_RED_PATH)
+
+    # Split into folder / name for create_asset.
+    folder_idx = M_ENEMY_RED_PATH.rfind("/")
+    folder = M_ENEMY_RED_PATH[:folder_idx]
+    name = M_ENEMY_RED_PATH[folder_idx + 1:]
+
+    factory = unreal.MaterialFactoryNew()
+    material = asset_tools.create_asset(name, folder, unreal.Material, factory)
+    if material is None:
+        raise RuntimeError("Failed to create material asset: " + M_ENEMY_RED_PATH)
+
+    # Add a Constant3Vector node and set its value to the target red.
+    r, g, b = ENEMY_RED_RGB
+    node = mat_lib.create_material_expression(
+        material, unreal.MaterialExpressionConstant3Vector, -300, -100)
+    color = unreal.LinearColor(r, g, b, 1.0)
+    node.set_editor_property("constant", color)
+
+    # Wire the node's RGB output to the material's Base Color input.
+    # Constant3Vector exposes its output as "RGB" (same pin name as TextureSample).
+    mat_lib.connect_material_property(node, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
+
+    # Required for the material to render on SkeletalMesh actors at runtime;
+    # without this flag UE falls back to the default grey material in-game.
+    material.set_editor_property("used_with_skeletal_mesh", True)
+
+    mat_lib.recompile_material(material)
+    asset_lib.save_asset(M_ENEMY_RED_PATH)
+    _log("Created and saved M_EnemyRed material: " + M_ENEMY_RED_PATH)
+    return material
 
 
 # ---------------------------------------------------------------------------
@@ -307,20 +383,85 @@ def wire_character(bp_path, skeletal_mesh_path, material_override_path, label):
         # Step 3: configure it with the mannequin.
         configure_mesh_component(mesh_comp, skeletal_mesh, anim_class, label)
 
-        # Step 3b: distinguish the enemy with a different material instance.
-        if material_override_path is not None:
-            material = load_object(material_override_path)
-            if material is None:
-                unreal.log_warning(
-                    "[setup_characters_ue] material override missing: "
-                    + material_override_path)
-            else:
-                apply_material_override(mesh_comp, material, label)
-
-        # Recompile to bake the template changes into the generated class.
+        # Recompile to bake the mesh/anim/transform changes into the generated class
+        # BEFORE applying material overrides.  A second compile after set_material()
+        # would reset the component's OverrideMaterials array, so we apply materials
+        # after the last compile.
         unreal.BlueprintEditorLibrary.compile_blueprint(bp)
 
-        # Step 4: save.
+        # Step 3b: distinguish the enemy with a different material.
+        # material_override can be a pre-loaded Material object or a path string.
+        # This must happen AFTER the final compile so the override is not reset.
+        material = None  # will be set below if material_override_path is given
+        if material_override_path is not None:
+            # Re-locate the mesh component after the compile (handles may have changed).
+            mesh_comp = find_character_mesh_component(bp)
+
+            if isinstance(material_override_path, str):
+                material = load_object(material_override_path)
+                if material is None:
+                    unreal.log_warning(
+                        "[setup_characters_ue] material override missing: "
+                        + material_override_path)
+            else:
+                # Already a loaded UObject (e.g. the M_EnemyRed Material).
+                material = material_override_path
+            if material is not None:
+                apply_material_override(mesh_comp, material, label)
+
+        # Step 3c: also write the material override on the CDO-level component.
+        # For inherited (native C++) components, UE serialises the override on the
+        # generated class CDO, not on the SCS template.  We get the CDO and its
+        # Mesh component and set override_materials there too.
+        if material_override_path is not None and material is not None:
+            try:
+                gen_class = bp.generated_class()
+                if gen_class is not None:
+                    cdo = unreal.get_default_object(gen_class)
+                    if cdo is not None:
+                        cdo_mesh = cdo.mesh
+                        if cdo_mesh is None:
+                            try:
+                                cdo_mesh = cdo.get_editor_property("mesh")
+                            except Exception:
+                                cdo_mesh = None
+                        if cdo_mesh is not None:
+                            skel_mesh_cdo = None
+                            try:
+                                skel_mesh_cdo = cdo_mesh.get_editor_property("skeletal_mesh_asset")
+                            except Exception:
+                                pass
+                            n = 0
+                            if skel_mesh_cdo is not None:
+                                try:
+                                    mats_cdo = skel_mesh_cdo.get_editor_property("materials")
+                                    n = len(mats_cdo) if mats_cdo else 0
+                                except Exception:
+                                    pass
+                            if n == 0:
+                                n = 2  # SKM_Manny_Simple has 2 slots
+                            override_cdo = [material] * n
+                            try:
+                                cdo_mesh.set_editor_property("override_materials", override_cdo)
+                                _log("%s: override_materials set on CDO mesh (%d slot(s))"
+                                     % (label, n))
+                            except Exception as e2:
+                                _log("%s: CDO override_materials failed: %s" % (label, str(e2)))
+                            for idx in range(n):
+                                try:
+                                    cdo_mesh.set_material(idx, material)
+                                except Exception:
+                                    pass
+                        else:
+                            _log("%s: CDO mesh component not found via .mesh" % label)
+                    else:
+                        _log("%s: get_default_object returned None" % label)
+                else:
+                    _log("%s: bp.generated_class() returned None" % label)
+            except Exception as exc_cdo:
+                _log("%s: CDO material write failed: %s" % (label, str(exc_cdo)))
+
+        # Step 4: save WITHOUT a final compile (which would reset override_materials).
         asset_lib.save_asset(bp_path)
         _log("%s: saved %s" % (label, bp_path))
     except Exception as exc:
@@ -339,8 +480,10 @@ def main():
     # Player: SKM_Manny, mannequin default material (no override).
     wire_character(BP_VSPLAYER_PATH, SKM_MANNY_PATH, None, "BP_VSPlayer")
 
-    # Enemy: SKM_Manny_Simple + MI_Manny_02 for a clear visual difference.
-    wire_character(BP_VSENEMY_PATH, SKM_MANNY_SIMPLE_PATH, MI_MANNY_02_PATH,
+    # Enemy: SKM_Manny_Simple + a clearly red material so it is visually
+    # distinct from the silver/grey player mannequin at a glance.
+    enemy_material = ensure_enemy_red_material()
+    wire_character(BP_VSENEMY_PATH, SKM_MANNY_SIMPLE_PATH, enemy_material,
                    "BP_VSEnemy")
 
     _log("=== Character mannequin wiring COMPLETE ===")
