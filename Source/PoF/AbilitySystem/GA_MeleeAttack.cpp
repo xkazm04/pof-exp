@@ -135,6 +135,14 @@ void UGA_MeleeAttack::StartMontageAndListenForCombo()
 			? ComboSectionNames[CurrentComboIndex]
 			: NAME_None;
 
+		// Pre-arm the fallback flag BEFORE ReadyForActivation() so that if the
+		// montage task's OnInterrupted / OnCancelled fires synchronously inside
+		// ReadyForActivation() (empty / zero-duration montage with a live AnimInstance),
+		// those callbacks see bUsingFallbackWindow=true and do NOT call EndAbility —
+		// which would destroy the Event.MeleeHit listener before the hit arrives.
+		// If the montage actually starts (confirmed below), we reset the flag.
+		bUsingFallbackWindow = true;
+
 		UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 			this,
 			TEXT("PlayMeleeAttack"),
@@ -154,14 +162,17 @@ void UGA_MeleeAttack::StartMontageAndListenForCombo()
 		UAbilitySystemComponent* ASC = GetARPGAbilitySystemComponent();
 		if (ASC && ASC->GetCurrentMontage() == AttackMontage)
 		{
+			// Montage is playing — normal path, not using fallback.
 			bUsingFallbackWindow = false;
 			return;
 		}
+		// Montage did not start — bUsingFallbackWindow remains true; fall through.
 	}
 
 	// Fallback path: no playable montage on this avatar (gray-box / empty montage).
 	// Keep the ability — and crucially its Event.MeleeHit listener — alive for a
 	// fixed attack window so a hit can still resolve, then end the ability cleanly.
+	// bUsingFallbackWindow is already true if we came from the failed-montage branch.
 	bUsingFallbackWindow = true;
 	UE_LOG(LogTemp, Log,
 		TEXT("[GA_MeleeAttack] No playable attack montage on this avatar; "
@@ -246,11 +257,23 @@ void UGA_MeleeAttack::OnComboWindowClosed(FGameplayEventData Payload)
 
 void UGA_MeleeAttack::OnMontageCompleted()
 {
+	// Ignore a stale completed callback from a montage that failed to play —
+	// the fallback timer keeps the ability (and its hit listener) alive instead.
+	if (bUsingFallbackWindow)
+	{
+		return;
+	}
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 
 void UGA_MeleeAttack::OnMontageBlendOut()
 {
+	// Ignore a stale blend-out from a montage that never started —
+	// same guard as OnMontageCompleted / OnMontageInterrupted / OnMontageCancelled.
+	if (bUsingFallbackWindow)
+	{
+		return;
+	}
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 
