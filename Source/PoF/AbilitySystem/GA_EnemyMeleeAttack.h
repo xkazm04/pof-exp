@@ -55,6 +55,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Enemy Melee|HitDetection", meta = (ClampMin = "10", ClampMax = "180"))
 	float HitHalfAngle = 90.f;
 
+	/** Attack-window length (s) used when no swing montage can play (gray-box avatar / empty montage). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Enemy Melee", meta = (ClampMin = "0.05"))
+	float FallbackAttackWindow = 0.3f;
+
 private:
 	UFUNCTION()
 	void OnMontageCompleted();
@@ -65,5 +69,14 @@ private:
 	UFUNCTION()
 	void OnMeleeHitEvent(FGameplayEventData Payload);
 
+	UFUNCTION()
+	void OnFallbackWindowElapsed();
+
 	void PerformFrontArcDamage();
+
+	/** True while running the timer-driven fallback (no playable swing montage). Pre-armed before ReadyForActivation. */
+	bool bUsingFallbackWindow = false;
+
+	/** Guard so the fallback front-arc damage applies at most once per activation. */
+	bool bDamageApplied = false;
 };
