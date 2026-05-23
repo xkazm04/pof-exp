@@ -17,6 +17,7 @@ LEVEL_PATH = "/Game/Maps/VerticalSlice"
 TESTS = [
     ("/Script/PoF.VSCombatGrayBoxPathTest", "VSCombatGrayBoxPathTest", unreal.Vector(0.0, 0.0, 220.0)),
     ("/Script/PoF.VSCombatAbilityGrantTest", "VSCombatAbilityGrantTest", unreal.Vector(0.0, 0.0, 240.0)),
+    ("/Script/PoF.VSCombatHotbarTest", "VSCombatHotbarTest", unreal.Vector(0.0, 0.0, 260.0)),
 ]
 
 
