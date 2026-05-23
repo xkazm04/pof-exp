@@ -94,6 +94,25 @@ bpy.ops.object.join()
 arena = bpy.context.active_object
 arena.name = "Arena"
 
+# --- lightmap UV (channel 1) ----------------------------------------------
+# A non-overlapping unwrap into a 2nd UV layer for the Lightmass bake. UV0
+# stays the world-aligned texture UVs; UV1 is the lightmap atlas. UE points
+# light_map_coordinate_index at channel 1.
+lm = arena.data.uv_layers.new(name="Lightmap")
+arena.data.uv_layers.active = lm
+bpy.ops.object.select_all(action='DESELECT')
+arena.select_set(True)
+bpy.context.view_layer.objects.active = arena
+bpy.ops.object.mode_set(mode='EDIT')
+bpy.ops.mesh.select_all(action='SELECT')
+try:
+    bpy.ops.uv.lightmap_pack(PREF_CONTEXT='ALL_FACES', PREF_MARGIN_DIV=0.2)
+except TypeError:
+    bpy.ops.uv.lightmap_pack()   # older/newer arg names -> defaults pack all
+bpy.ops.object.mode_set(mode='OBJECT')
+arena.data.uv_layers.active_index = 0   # UV0 (texture UVs) is the render/active layer
+print("LIGHTMAP_UV_PACKED channels=%d" % len(arena.data.uv_layers))
+
 # --- export FBX ------------------------------------------------------------
 bpy.ops.export_scene.fbx(filepath=OUT, use_selection=True,
     apply_unit_scale=True, global_scale=1.0, object_types={'MESH'},
