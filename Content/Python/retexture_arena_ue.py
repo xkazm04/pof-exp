@@ -53,15 +53,13 @@ SURFACE_TO_MATERIAL = {
 SURFACES = ["floor", "wall", "pillar"]
 
 # Tiling correction.
-#   PS-2 built the materials with no explicit TextureCoordinate, so the
-#   arena's cube-projection UVs tiled the textures ~10x across the 20 m space
-#   (the "industrial repeating grid" look PS-3 fixes).
-#   A TextureCoordinate UTiling/VTiling of N multiplies the incoming UVs by N.
-#   To go from an effective ~10x repeat down to ~3x we want ~0.3x of PS-2's
-#   tiling -> UTiling = VTiling = 3.0 yields roughly 3 repeats over the 20 m
-#   arena (a ~6-7 m stone span per repeat), which reads as natural masonry
-#   rather than a grid.
-TILING = 3.0
+#   build_arena.py now unwraps the arena with WORLD-ALIGNED planar UVs at
+#   TILE_METERS = 4 m per repeat -- the UVs already encode the real-world
+#   texture scale. So the material's TextureCoordinate must be a pass-through
+#   (UTiling = VTiling = 1.0); any other value re-multiplies the UVs and brings
+#   back the repeating-grid look. Final repeat = TILE_METERS (4 m) x TILING.
+#   (Tune from here: bump TILING for more repeats without re-exporting the FBX.)
+TILING = 1.0
 
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 asset_lib = unreal.EditorAssetLibrary
