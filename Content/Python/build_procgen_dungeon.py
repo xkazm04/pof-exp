@@ -72,10 +72,22 @@ def main():
     rt_end = make_template("RT_End", [D.SOUTH])
 
     les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+    # new_level alone does not reliably persist actors spawned right after it;
+    # materialize the empty .umap, then load_level to BIND it (the proven
+    # load -> spawn -> save pattern), then spawn into the bound level.
     les.new_level(LEVEL_PATH)
-    _log("Created level: " + LEVEL_PATH)
+    les.save_current_level()
+    les.load_level(LEVEL_PATH)
+    _log("Created + bound level: " + LEVEL_PATH)
 
     aes = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+
+    # Idempotent reset: clear any actors left from a prior run (new_level does
+    # not always start from empty when the path already exists).
+    for a in aes.get_all_level_actors():
+        if isinstance(a, (unreal.ARPGLevelGenerator, unreal.ARPGBlockoutRoom,
+                          unreal.ProcGenWalkTest)):
+            aes.destroy_actor(a)
 
     dl = aes.spawn_actor_from_class(unreal.DirectionalLight,
                                     unreal.Vector(0.0, 0.0, 1000.0),
@@ -117,8 +129,21 @@ def main():
         unreal.log_warning("[build_procgen] room count %d != target %d "
                            "(seed/connectivity may need tuning)" % (len(rooms), TARGET_ROOMS))
 
+    # Bake the walkability functional test into the map (so Automation RunTests
+    # finds it), same pass = same world = persists with the generator + rooms.
+    wt = aes.spawn_actor_from_class(unreal.ProcGenWalkTest, unreal.Vector(0.0, 0.0, 300.0))
+    wt.set_actor_label("ProcGenWalkTest")
+
     les.save_current_level()
     _log("Saved level: " + LEVEL_PATH)
+
+    # Persistence check: reload from disk and confirm the actors are really there.
+    les.load_level(LEVEL_PATH)
+    a2 = aes.get_all_level_actors()
+    g = len([a for a in a2 if isinstance(a, unreal.ARPGLevelGenerator)])
+    r = len([a for a in a2 if isinstance(a, unreal.ARPGBlockoutRoom)])
+    w = len([a for a in a2 if isinstance(a, unreal.ProcGenWalkTest)])
+    _log("Persisted after reload: generators=%d rooms=%d walktests=%d" % (g, r, w))
     _log("=== ProcGen dungeon build COMPLETE ===")
 
 
