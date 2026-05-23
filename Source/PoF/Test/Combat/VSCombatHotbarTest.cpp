@@ -100,6 +100,9 @@ void AVSCombatHotbarTest::Tick(float DeltaSeconds)
 	}
 
 	// Phase 1 — activate each loadout slot (one per tick), cancelling prior state first.
+	// TryActivateAbilitySlot returns the synchronous activation result (CanActivate +
+	// CommitAbility), so asserting on the same tick is valid even for a GA whose
+	// ActivateAbility later runs async tasks; CancelAllAbilities clears the prior slot.
 	if (Phase == 1)
 	{
 		ASC->CancelAllAbilities();
