@@ -330,6 +330,63 @@ def assign_materials(mesh):
 
 
 # ---------------------------------------------------------------------------
+# Section 4b: Atmosphere -- post-process volume + height fog
+# ---------------------------------------------------------------------------
+
+def add_atmosphere(actor_subsystem):
+    """Spawn an unbound PostProcessVolume + ExponentialHeightFog (idempotent).
+
+    A wrong FPostProcessSettings Python field name raises on get/set (caught by
+    the caller) for value fields; the bOverride_* flags only take effect at
+    render time, so the real gate is the Gemini visual check.
+    """
+    # Clean any previously-spawned atmosphere actors for an idempotent re-run.
+    for actor in actor_subsystem.get_all_level_actors():
+        if isinstance(actor, (unreal.PostProcessVolume,
+                              unreal.ExponentialHeightFog)):
+            actor_subsystem.destroy_actor(actor)
+
+    # --- Unbound post-process volume -----------------------------------------
+    ppv = actor_subsystem.spawn_actor_from_class(
+        unreal.PostProcessVolume, unreal.Vector(0.0, 0.0, 0.0))
+    ppv.set_actor_label("Arena_PostProcess")
+    ppv.set_editor_property("unbound", True)
+
+    settings = ppv.get_editor_property("settings")
+    settings.set_editor_property("auto_exposure_min_brightness", 0.5)
+    settings.set_editor_property("b_override_auto_exposure_min_brightness", True)
+    settings.set_editor_property("auto_exposure_max_brightness", 2.0)
+    settings.set_editor_property("b_override_auto_exposure_max_brightness", True)
+    settings.set_editor_property("bloom_intensity", 0.5)
+    settings.set_editor_property("b_override_bloom_intensity", True)
+    settings.set_editor_property("vignette_intensity", 0.4)
+    settings.set_editor_property("b_override_vignette_intensity", True)
+    settings.set_editor_property("color_saturation",
+                                 unreal.Vector4(1.1, 1.1, 1.1, 1.0))
+    settings.set_editor_property("b_override_color_saturation", True)
+    ppv.set_editor_property("settings", settings)
+
+    # Read back the scalar values to confirm the field names are correct.
+    chk = ppv.get_editor_property("settings")
+    _log("PostProcess bloom=%.2f vignette=%.2f autoexp=[%.2f,%.2f]" % (
+        chk.get_editor_property("bloom_intensity"),
+        chk.get_editor_property("vignette_intensity"),
+        chk.get_editor_property("auto_exposure_min_brightness"),
+        chk.get_editor_property("auto_exposure_max_brightness")))
+
+    # --- Exponential height fog ----------------------------------------------
+    fog = actor_subsystem.spawn_actor_from_class(
+        unreal.ExponentialHeightFog, unreal.Vector(0.0, 0.0, 0.0))
+    fog.set_actor_label("Arena_HeightFog")
+    fog_comp = fog.get_editor_property("component")
+    fog_comp.set_editor_property("fog_density", 0.02)
+    fog_comp.set_editor_property("fog_height_falloff", 0.2)
+    fog_comp.set_editor_property("fog_inscattering_color",
+                                 unreal.LinearColor(0.4, 0.45, 0.6, 1.0))
+    _log("Spawned PostProcessVolume + ExponentialHeightFog")
+
+
+# ---------------------------------------------------------------------------
 # Section 5: Rebuild the VerticalSlice level
 # ---------------------------------------------------------------------------
 
@@ -463,6 +520,8 @@ def rebuild_level():
                     except Exception:
                         pass
                 _log("SkyLight -> Movable, intensity 3.0, real-time capture")
+
+        add_atmosphere(actor_subsystem)
 
         level_subsystem.save_current_level()
         _log("Saved level: " + LEVEL_PATH)
