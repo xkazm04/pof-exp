@@ -127,6 +127,12 @@ def main():
     mat_lib.connect_material_expressions(emissive_strength, "", emissive_mul, "B")
     mat_lib.connect_material_property(emissive_mul, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
 
+    # Allow instances of this master to be used on skeletal meshes (the enemy).
+    try:
+        material.set_editor_property("used_with_skeletal_mesh", True)
+    except Exception as exc:
+        unreal.log_warning("[build_master_material] could not set skeletal usage: " + str(exc))
+
     mat_lib.recompile_material(material)
     asset_lib.save_asset(MASTER_PATH)
 
