@@ -50,6 +50,7 @@ void AVSCombatHotbarTest::StartTest()
 	if (!Player.IsValid())
 	{
 		FinishTest(EFunctionalTestResult::Failed, TEXT("No player character"));
+		return;
 	}
 }
 
@@ -80,6 +81,8 @@ void AVSCombatHotbarTest::Tick(float DeltaSeconds)
 			// Remove mana cost as a confound — we are testing wiring, not economy.
 			ASC->SetNumericAttributeBase(UARPGAttributeSet::GetManaAttribute(), 9999.f);
 
+			// GA_MeleeAttack is granted by build_vertical_slice.py (DefaultAbilities[0]);
+			// wire_combat_abilities.py path-dedupes the rest on top.
 			AssertTrue(HasGrantedAbility(ASC, UGA_MeleeAttack::StaticClass()), TEXT("grant: GA_MeleeAttack"));
 			AssertTrue(HasGrantedAbility(ASC, UGA_Fireball::StaticClass()),    TEXT("grant: GA_Fireball"));
 			AssertTrue(HasGrantedAbility(ASC, UGA_GroundSlam::StaticClass()),  TEXT("grant: GA_GroundSlam"));

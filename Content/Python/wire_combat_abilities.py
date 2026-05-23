@@ -112,6 +112,7 @@ def wire_player():
         if cls is None:
             raise RuntimeError("Missing loadout class " + path)
         loadout[slot] = cls
+    # Full-replace (not merge): the slice's default loadout is wholly owned by this script.
     cdo.set_editor_property("AbilityLoadout", loadout)
 
     asset_lib.save_asset(BP_VSPLAYER)
