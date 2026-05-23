@@ -8,12 +8,13 @@ multi-room greybox dungeon into the saved map (edit-time generation).
 Run via the FULL editor (level Python needs Slate):
     UnrealEditor.exe <uproject> -ExecutePythonScript="<abs path>" -unattended -nopause -nosplash
 """
+import os
 import unreal
 
 ROOM_TEMPLATES_DIR = "/Game/Level/RoomTemplates"
 LEVEL_PATH = "/Game/Maps/ProcGenDungeon"
-TARGET_ROOMS = 6
-SEED = 1337
+TARGET_ROOMS = int(os.environ.get("PROCGEN_ROOMS", "6"))
+SEED = int(os.environ.get("PROCGEN_SEED", "1337"))
 ROOM = 800.0
 
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
