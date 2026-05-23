@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "UI/ARPGCodeWidgetBase.h"
 #include "VSHUDWidget.generated.h"
 
 struct FOnAttributeChangeData;
@@ -13,7 +13,7 @@ struct FOnAttributeChangeData;
  * each bound to a GAS AbilitySystemComponent's Health attribute.
  */
 UCLASS()
-class POF_API UVSHUDWidget : public UUserWidget
+class POF_API UVSHUDWidget : public UARPGCodeWidgetBase
 {
 	GENERATED_BODY()
 
@@ -24,12 +24,10 @@ public:
 	void BindEnemy(class UAbilitySystemComponent* ASC, const FString& EnemyName);
 
 protected:
-	/** Build the widget tree here — runs before the Slate tree is constructed,
-	 *  unlike NativeConstruct() which runs too late for WidgetTree mutation. */
-	virtual TSharedRef<class SWidget> RebuildWidget() override;
+	/** Build the slice HUD tree. Base class calls this from RebuildWidget(). */
+	virtual void BuildTree() override;
 
 private:
-	void BuildTree();
 	void OnPlayerHealthChanged(const FOnAttributeChangeData& Data);
 	void OnPlayerMaxHealthChanged(const FOnAttributeChangeData& Data);
 	void OnEnemyHealthChanged(const FOnAttributeChangeData& Data);

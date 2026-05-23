@@ -10,40 +10,7 @@
 #include "Styling/CoreStyle.h"
 #include "Styling/SlateBrush.h"
 
-namespace
-{
-	/** A solid-colour brush usable as a ProgressBar background/fill or Border image. */
-	FSlateBrush MakeSolidBrush(const FLinearColor& Colour)
-	{
-		FSlateBrush Brush;
-		Brush.TintColor = FSlateColor(Colour);
-		Brush.DrawAs = ESlateBrushDrawType::Box;
-		Brush.ImageSize = FVector2D(16.f, 16.f);
-		return Brush;
-	}
 
-	/** Build a ProgressBar style with an explicit dark track + bright fill so the
-	 *  bar is clearly visible at any percent (the engine default has a transparent
-	 *  background image, which makes an empty/low bar invisible). */
-	FProgressBarStyle MakeBarStyle(const FLinearColor& FillColour)
-	{
-		FProgressBarStyle Style;
-		Style.BackgroundImage = MakeSolidBrush(FLinearColor(0.04f, 0.04f, 0.05f, 0.85f));
-		Style.FillImage       = MakeSolidBrush(FillColour);
-		Style.MarqueeImage    = MakeSolidBrush(FillColour);
-		Style.EnableFillAnimation = false;
-		return Style;
-	}
-}
-
-TSharedRef<SWidget> UVSHUDWidget::RebuildWidget()
-{
-	// Build the tree BEFORE the Slate widget is constructed. NativeConstruct()
-	// runs after the Slate tree already exists, so mutating WidgetTree there has
-	// no visible effect — that was why the bars never rendered.
-	BuildTree();
-	return Super::RebuildWidget();
-}
 
 void UVSHUDWidget::BuildTree()
 {
@@ -79,10 +46,7 @@ void UVSHUDWidget::BuildTree()
 		FrameSlot->SetSize(FVector2D(286.f, 28.f));
 	}
 
-	PlayerHealthBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), FName(TEXT("PlayerHealthBar")));
-	PlayerHealthBar->SetWidgetStyle(MakeBarStyle(PlayerFill));
-	PlayerHealthBar->SetFillColorAndOpacity(PlayerFill);
-	PlayerHealthBar->SetPercent(1.f);
+	PlayerHealthBar = CreateStyledProgressBar(FName(TEXT("PlayerHealthBar")), PlayerFill);
 	PlayerFrame->SetContent(PlayerHealthBar);
 
 	PlayerHealthText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), FName(TEXT("PlayerHealthText")));
@@ -121,10 +85,7 @@ void UVSHUDWidget::BuildTree()
 		EnemyFrameSlot->SetSize(FVector2D(380.f, 28.f));
 	}
 
-	EnemyHealthBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), FName(TEXT("EnemyHealthBar")));
-	EnemyHealthBar->SetWidgetStyle(MakeBarStyle(EnemyFill));
-	EnemyHealthBar->SetFillColorAndOpacity(EnemyFill);
-	EnemyHealthBar->SetPercent(1.f);
+	EnemyHealthBar = CreateStyledProgressBar(FName(TEXT("EnemyHealthBar")), EnemyFill);
 	EnemyFrame->SetContent(EnemyHealthBar);
 
 	EnemyHealthText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), FName(TEXT("EnemyHealthText")));
