@@ -399,8 +399,10 @@ private:
 	TWeakObjectPtr<AActor> InteractionTarget;
 	float InteractionScanTimer = 0.f;
 
-	// Ability loadout: SlotIndex (0..N-1) -> AbilityClass
-	UPROPERTY()
+	// Ability loadout: SlotIndex (0..N-1) -> AbilityClass. EditDefaultsOnly so the
+	// default hotbar can be authored per-Blueprint (BP_VSPlayer); runtime code still
+	// reassigns via AssignAbilityToSlot.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities")
 	TMap<int32, TSubclassOf<UGameplayAbility>> AbilityLoadout;
 
 	// Respawn
