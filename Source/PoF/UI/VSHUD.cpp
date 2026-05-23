@@ -1,5 +1,7 @@
 #include "UI/VSHUD.h"
 #include "UI/VSHUDWidget.h"
+#include "UI/DamageNumberManagerComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "Player/ARPGPlayerCharacter.h"
 #include "Character/ARPGEnemyCharacter.h"
 #include "AbilitySystemInterface.h"
@@ -24,6 +26,19 @@ void AVSHUD::BeginPlay()
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[VSHUD] failed to create HUD widget"));
+	}
+
+	// Guarantee floating damage numbers for the slice regardless of which
+	// PlayerControllerClass BP_VSGameMode uses. Idempotent: a no-op if the
+	// controller already created a DamageNumberManagerComponent.
+	if (APlayerController* PC = GetOwningPlayerController())
+	{
+		if (!PC->FindComponentByClass<UDamageNumberManagerComponent>())
+		{
+			UDamageNumberManagerComponent* Mgr = NewObject<UDamageNumberManagerComponent>(PC);
+			Mgr->RegisterComponent();
+			UE_LOG(LogTemp, Log, TEXT("[VSHUD] added DamageNumberManagerComponent to controller"));
+		}
 	}
 
 	TryBind();
