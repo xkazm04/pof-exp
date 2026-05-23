@@ -7,6 +7,7 @@ OUT = os.path.join(os.path.dirname(bpy.data.filepath) or os.path.dirname(__file_
 ARENA = 20.0           # floor is 20 m square
 WALL_H = 5.0           # wall height (m)
 WALL_T = 0.5           # wall thickness (m)
+TILE_METERS = 4.0      # world metres per texture repeat (world-aligned UVs)
 
 # --- clean scene -----------------------------------------------------------
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -46,15 +47,43 @@ for i, (sx, sy) in enumerate([(1,1),(1,-1),(-1,1),(-1,-1)]):
     p.data.materials.append(mat_pillar)
     parts.append(p)
 
-# --- UV unwrap each part (cube projection is fine for a gray-arena) --------
+# --- UV unwrap ------------------------------------------------------------
+# World-aligned planar UVs: project each face's world position onto the plane
+# perpendicular to its dominant world-normal axis, divided by TILE_METERS, so
+# one texture repeat == TILE_METERS of world space everywhere. This replaces
+# the per-face cube projection that produced a repeating grid. Pillars are
+# curved, so they keep a smart unwrap.
+def world_aligned_uv(obj, tile):
+    mesh = obj.data
+    if not mesh.uv_layers:
+        mesh.uv_layers.new(name="UVMap")
+    uv = mesh.uv_layers.active.data
+    mw = obj.matrix_world
+    rot = mw.to_3x3()
+    for poly in mesh.polygons:
+        n = rot @ poly.normal
+        ax, ay, az = abs(n.x), abs(n.y), abs(n.z)
+        for li in poly.loop_indices:
+            co = mw @ mesh.vertices[mesh.loops[li].vertex_index].co
+            if az >= ax and az >= ay:      # floor / ceiling -> world XY
+                u, v = co.x, co.y
+            elif ay >= ax:                  # N/S walls -> world XZ
+                u, v = co.x, co.z
+            else:                           # E/W walls -> world YZ
+                u, v = co.y, co.z
+            uv[li].uv = (u / tile, v / tile)
+
 for obj in parts:
-    bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.select_all(action='DESELECT')
-    obj.select_set(True)
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.uv.cube_project(cube_size=2.0)
-    bpy.ops.object.mode_set(mode='OBJECT')
+    if obj.name.startswith("Pillar"):
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.select_set(True)
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.uv.smart_project(angle_limit=1.15, island_margin=0.02)
+        bpy.ops.object.mode_set(mode='OBJECT')
+    else:
+        world_aligned_uv(obj, TILE_METERS)
 
 # --- join into one object "Arena" -----------------------------------------
 bpy.ops.object.select_all(action='DESELECT')
