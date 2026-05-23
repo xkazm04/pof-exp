@@ -110,6 +110,17 @@ void UGA_MeleeAttack::StartMontageAndListenForCombo()
 	// fails to play — otherwise EndAbility tears them down before a hit lands.
 	ListenForComboWindow();
 
+	// Gray-box (false) mode: the ability applies its own damage at a deterministic
+	// mid-swing offset, resolving a forward melee target itself — no hit-detection
+	// AnimNotify required. Scheduled here (before the montage branch, which may
+	// return early) so it fires whether or not a montage actually plays.
+	if (!bUseAnimationDrivenDamage)
+	{
+		UAbilityTask_WaitDelay* HitTask = UAbilityTask_WaitDelay::WaitDelay(this, GrayBoxHitDelay);
+		HitTask->OnFinish.AddDynamic(this, &UGA_MeleeAttack::OnGrayBoxHitWindow);
+		HitTask->ReadyForActivation();
+	}
+
 	// Determine up-front whether the avatar can actually play an anim montage.
 	// On a gray-box character (no SkeletalMesh / no AnimInstance) PlayMontageAndWait
 	// fails internally and the engine logs "PlayMontage failed!". We pre-check so
@@ -189,6 +200,17 @@ void UGA_MeleeAttack::OnFallbackWindowElapsed()
 	// The fallback attack window expired — end the ability normally (not cancelled),
 	// so any combo/hit state is cleaned up the same way a finished montage would.
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
+}
+
+void UGA_MeleeAttack::OnGrayBoxHitWindow()
+{
+	// Gray-box (bUseAnimationDrivenDamage=false): no Event.MeleeHit / notify fires,
+	// so resolve the melee target ourselves with a forward-cone search and apply
+	// the damage GE. Reuses the shared search + apply paths.
+	if (AActor* Target = FindForwardTarget(MeleeHitRange, WarpTargetSearchAngle))
+	{
+		ApplyMeleeDamageTo(Target, nullptr);
+	}
 }
 
 void UGA_MeleeAttack::ListenForComboWindow()
@@ -313,15 +335,12 @@ void UGA_MeleeAttack::OnComboInputReceived(FGameplayEventData Payload)
 	}
 }
 
-void UGA_MeleeAttack::OnMeleeHit(FGameplayEventData Payload)
+void UGA_MeleeAttack::ApplyMeleeDamageTo(AActor* Target, const FHitResult* OptionalHit)
 {
-	if (!DamageEffect) return;
-
-	AActor* HitActor = const_cast<AActor*>(Payload.Target.Get());
-	if (!HitActor) return;
+	if (!DamageEffect || !Target) return;
 
 	// Get the target's ASC via the AbilitySystemInterface
-	IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(HitActor);
+	IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(Target);
 	UAbilitySystemComponent* TargetASC = ASI ? ASI->GetAbilitySystemComponent() : nullptr;
 	if (!TargetASC) return;
 
@@ -331,14 +350,9 @@ void UGA_MeleeAttack::OnMeleeHit(FGameplayEventData Payload)
 	// Build the GE spec
 	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
 	Context.AddSourceObject(this);
-	// Add hit result to context if available in the payload
-	if (Payload.TargetData.Num() > 0)
+	if (OptionalHit)
 	{
-		const FHitResult* HitResult = Payload.TargetData.Get(0)->GetHitResult();
-		if (HitResult)
-		{
-			Context.AddHitResult(*HitResult);
-		}
+		Context.AddHitResult(*OptionalHit);
 	}
 
 	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(
@@ -358,7 +372,16 @@ void UGA_MeleeAttack::OnMeleeHit(FGameplayEventData Payload)
 	SourceASC->ApplyGameplayEffectSpecToTarget(*Spec, TargetASC);
 
 	UE_LOG(LogTemp, Log, TEXT("[GA_MeleeAttack] Applied damage to %s: Base=%.1f x Combo=%.2f"),
-		*HitActor->GetName(), BaseDamage, ComboMultiplier);
+		*Target->GetName(), BaseDamage, ComboMultiplier);
+}
+
+void UGA_MeleeAttack::OnMeleeHit(FGameplayEventData Payload)
+{
+	AActor* HitActor = const_cast<AActor*>(Payload.Target.Get());
+	const FHitResult* HitResult = (Payload.TargetData.Num() > 0)
+		? Payload.TargetData.Get(0)->GetHitResult()
+		: nullptr;
+	ApplyMeleeDamageTo(HitActor, HitResult);
 }
 
 void UGA_MeleeAttack::AdvanceCombo()
@@ -387,19 +410,17 @@ void UGA_MeleeAttack::AdvanceCombo()
 	}
 }
 
-void UGA_MeleeAttack::AcquireWarpTarget()
+AActor* UGA_MeleeAttack::FindForwardTarget(float Range, float HalfAngleDeg)
 {
-	if (!bEnableAttackMagnetism) return;
-
 	AARPGCharacterBase* Character = GetARPGCharacter();
-	if (!Character) return;
+	if (!Character) return nullptr;
 
 	UWorld* World = Character->GetWorld();
-	if (!World) return;
+	if (!World) return nullptr;
 
 	const FVector Origin = Character->GetActorLocation();
 	const FVector Forward = Character->GetActorForwardVector();
-	const float CosHalfAngle = FMath::Cos(FMath::DegreesToRadians(WarpTargetSearchAngle));
+	const float CosHalfAngle = FMath::Cos(FMath::DegreesToRadians(HalfAngleDeg));
 
 	// Overlap sphere to find candidates
 	FCollisionQueryParams QueryParams;
@@ -411,7 +432,7 @@ void UGA_MeleeAttack::AcquireWarpTarget()
 		Origin,
 		FQuat::Identity,
 		ECC_Pawn,
-		FCollisionShape::MakeSphere(WarpTargetSearchRadius),
+		FCollisionShape::MakeSphere(Range),
 		QueryParams);
 
 	AActor* BestTarget = nullptr;
@@ -424,17 +445,15 @@ void UGA_MeleeAttack::AcquireWarpTarget()
 		if (Candidate == Character) continue;
 
 		// Must implement AbilitySystemInterface (i.e., be a combatant)
-		if (!Cast<IAbilitySystemInterface>(Candidate)) continue;
+		IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(Candidate);
+		if (!ASI) continue;
 
 		// Must be alive — check for State.Dead tag
-		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(Candidate))
+		if (UAbilitySystemComponent* TargetASC = ASI->GetAbilitySystemComponent())
 		{
-			if (UAbilitySystemComponent* TargetASC = ASI->GetAbilitySystemComponent())
+			if (TargetASC->HasMatchingGameplayTag(ARPGGameplayTags::State_Dead))
 			{
-				if (TargetASC->HasMatchingGameplayTag(ARPGGameplayTags::State_Dead))
-				{
-					continue;
-				}
+				continue;
 			}
 		}
 
@@ -455,24 +474,34 @@ void UGA_MeleeAttack::AcquireWarpTarget()
 		}
 	}
 
-	if (BestTarget)
-	{
-		// Compute warp location: stop WarpStopDistance away from the target
-		const FVector ToTarget = BestTarget->GetActorLocation() - Origin;
-		const float Dist = ToTarget.Size2D();
+	return BestTarget;
+}
 
-		if (Dist > WarpStopDistance)
-		{
-			const FVector WarpLocation = BestTarget->GetActorLocation() - ToTarget.GetSafeNormal2D() * WarpStopDistance;
-			Character->SetAttackWarpTarget(
-				FVector(WarpLocation.X, WarpLocation.Y, Origin.Z),
-				WarpTargetName);
-		}
-		else
-		{
-			// Already close enough — just face the target
-			Character->SetAttackWarpTarget(Origin, WarpTargetName);
-		}
+void UGA_MeleeAttack::AcquireWarpTarget()
+{
+	if (!bEnableAttackMagnetism) return;
+
+	AARPGCharacterBase* Character = GetARPGCharacter();
+	if (!Character) return;
+
+	AActor* BestTarget = FindForwardTarget(WarpTargetSearchRadius, WarpTargetSearchAngle);
+	if (!BestTarget) return;
+
+	const FVector Origin = Character->GetActorLocation();
+	const FVector ToTarget = BestTarget->GetActorLocation() - Origin;
+	const float Dist = ToTarget.Size2D();
+
+	if (Dist > WarpStopDistance)
+	{
+		const FVector WarpLocation = BestTarget->GetActorLocation() - ToTarget.GetSafeNormal2D() * WarpStopDistance;
+		Character->SetAttackWarpTarget(
+			FVector(WarpLocation.X, WarpLocation.Y, Origin.Z),
+			WarpTargetName);
+	}
+	else
+	{
+		// Already close enough — just face the target
+		Character->SetAttackWarpTarget(Origin, WarpTargetName);
 	}
 }
 

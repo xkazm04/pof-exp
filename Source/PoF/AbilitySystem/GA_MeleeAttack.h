@@ -65,6 +65,24 @@ protected:
 	TArray<float> ComboDamageMultipliers;
 
 	/**
+	 * When false (default, gray-box: an empty montage or no hit-detection notify yet),
+	 * the ability resolves its own forward melee target and applies damage at a
+	 * deterministic mid-swing offset — no AnimNotify required. When true, the ability
+	 * skips the self-apply and relies on the montage's hit-detection notify firing
+	 * Event.MeleeHit. Flip to true once a real attack montage with a hit notify lands.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Damage")
+	bool bUseAnimationDrivenDamage = false;
+
+	/** Seconds into the swing the gray-box self-applied hit lands (false mode only). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Damage", meta = (ClampMin = "0.0"))
+	float GrayBoxHitDelay = 0.2f;
+
+	/** Forward melee reach (cm) for the gray-box target search. Distinct from the warp radius. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Damage", meta = (ClampMin = "0.0"))
+	float MeleeHitRange = 180.f;
+
+	/**
 	 * Fallback attack-window duration (seconds). If the attack montage fails to
 	 * play (e.g. a gray-box character with no skeletal mesh, or an empty montage),
 	 * the ability stays active for this long so the hit-detection / Event.MeleeHit
@@ -157,4 +175,14 @@ private:
 
 	/** Clear the warp target on the owning character. */
 	void ClearWarpTarget();
+
+	/** WaitDelay callback: in gray-box (false) mode, resolve a forward target and apply the hit. */
+	UFUNCTION()
+	void OnGrayBoxHitWindow();
+
+	/** Forward-cone search for the nearest live combatant. Shared by warp + gray-box hit. */
+	AActor* FindForwardTarget(float Range, float HalfAngleDeg);
+
+	/** Build + apply the damage GameplayEffect to a resolved target (shared by both paths). */
+	void ApplyMeleeDamageTo(AActor* Target, const FHitResult* OptionalHit);
 };
