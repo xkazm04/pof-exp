@@ -33,6 +33,10 @@ struct FPlacedRoom
 	UPROPERTY(BlueprintReadOnly, Category = "Generation")
 	TArray<int32> ConnectedRoomIndices;
 
+	/** Directions whose wall is an open archway to a connected room. */
+	UPROPERTY(BlueprintReadOnly, Category = "Generation")
+	TArray<ERoomConnectionDirection> OpenDirections;
+
 	/** The spawned blockout room actor. */
 	UPROPERTY(BlueprintReadOnly, Category = "Generation")
 	TWeakObjectPtr<AARPGBlockoutRoom> BlockoutActor;

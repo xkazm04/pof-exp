@@ -85,23 +85,53 @@ void AARPGBlockoutRoom::UpdateWalls()
 	const float HalfZ = RoomDimensions.Z * 0.5f;
 	const float HalfThick = WallThickness * 0.5f;
 
-	// Wall scale: cube is 100x100x100 base
-	// +X wall
-	CreateOrUpdateWall(0,
-		FVector(HalfX + HalfThick, 0.f, HalfZ),
-		FVector(WallThickness / 100.f, RoomDimensions.Y / 100.f, RoomDimensions.Z / 100.f));
-	// -X wall
-	CreateOrUpdateWall(1,
-		FVector(-HalfX - HalfThick, 0.f, HalfZ),
-		FVector(WallThickness / 100.f, RoomDimensions.Y / 100.f, RoomDimensions.Z / 100.f));
-	// +Y wall
-	CreateOrUpdateWall(2,
-		FVector(0.f, HalfY + HalfThick, HalfZ),
-		FVector((RoomDimensions.X + WallThickness * 2.f) / 100.f, WallThickness / 100.f, RoomDimensions.Z / 100.f));
-	// -Y wall
-	CreateOrUpdateWall(3,
-		FVector(0.f, -HalfY - HalfThick, HalfZ),
-		FVector((RoomDimensions.X + WallThickness * 2.f) / 100.f, WallThickness / 100.f, RoomDimensions.Z / 100.f));
+	// Each wall maps to a connection direction; an open side (a connected
+	// doorway) gets no wall so the player can walk through. Cube is 100^3 base.
+	struct FWallDef { ERoomConnectionDirection Dir; int32 Index; FVector Loc; FVector Scale; };
+	const FWallDef Defs[4] = {
+		// +X = North
+		{ ERoomConnectionDirection::North, 0, FVector(HalfX + HalfThick, 0.f, HalfZ),
+		  FVector(WallThickness / 100.f, RoomDimensions.Y / 100.f, RoomDimensions.Z / 100.f) },
+		// -X = South
+		{ ERoomConnectionDirection::South, 1, FVector(-HalfX - HalfThick, 0.f, HalfZ),
+		  FVector(WallThickness / 100.f, RoomDimensions.Y / 100.f, RoomDimensions.Z / 100.f) },
+		// +Y = East
+		{ ERoomConnectionDirection::East, 2, FVector(0.f, HalfY + HalfThick, HalfZ),
+		  FVector((RoomDimensions.X + WallThickness * 2.f) / 100.f, WallThickness / 100.f, RoomDimensions.Z / 100.f) },
+		// -Y = West
+		{ ERoomConnectionDirection::West, 3, FVector(0.f, -HalfY - HalfThick, HalfZ),
+		  FVector((RoomDimensions.X + WallThickness * 2.f) / 100.f, WallThickness / 100.f, RoomDimensions.Z / 100.f) },
+	};
+
+	for (const FWallDef& D : Defs)
+	{
+		if (OpenSides.Contains(D.Dir))
+		{
+			if (WallMeshes[D.Index])
+			{
+				WallMeshes[D.Index]->DestroyComponent();
+				WallMeshes[D.Index] = nullptr;
+			}
+		}
+		else
+		{
+			CreateOrUpdateWall(D.Index, D.Loc, D.Scale);
+		}
+	}
+}
+
+void AARPGBlockoutRoom::InitRoom(FVector Dimensions, EBlockoutRoomPurpose Purpose,
+	const TArray<ERoomConnectionDirection>& InOpenSides)
+{
+	RoomDimensions = Dimensions;
+	RoomPurpose = Purpose;
+	OpenSides = InOpenSides;
+	UpdateFloorScale();
+	UpdateWalls();
+	if (BoundsIndicator)
+	{
+		BoundsIndicator->ShapeColor = GetPurposeColor();
+	}
 }
 
 void AARPGBlockoutRoom::CreateOrUpdateWall(int32 WallIndex, const FVector& RelativeLocation, const FVector& Scale)

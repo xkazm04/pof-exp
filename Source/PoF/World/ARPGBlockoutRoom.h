@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "LevelDesign/ARPGRoomTemplate.h"
 #include "ARPGBlockoutRoom.generated.h"
 
 class UBoxComponent;
@@ -57,6 +58,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Blockout")
 	FBox GetRoomWorldBounds() const;
 
+	/** Set size + purpose + which sides are open archways (called by the generator), then rebuild. */
+	UFUNCTION(BlueprintCallable, Category = "Blockout")
+	void InitRoom(FVector Dimensions, EBlockoutRoomPurpose Purpose,
+		const TArray<ERoomConnectionDirection>& InOpenSides);
+
 protected:
 	virtual void OnConstruction(const FTransform& Transform) override;
 
@@ -106,4 +112,8 @@ private:
 	/** Dynamically created wall meshes. Order: +X, -X, +Y, -Y */
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMeshComponent>> WallMeshes;
+
+	/** Sides with an open archway (no wall) — set by InitRoom from the generator. */
+	UPROPERTY()
+	TArray<ERoomConnectionDirection> OpenSides;
 };

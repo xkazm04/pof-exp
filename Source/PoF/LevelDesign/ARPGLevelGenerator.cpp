@@ -116,11 +116,14 @@ void AARPGLevelGenerator::GenerateLevel()
 		NewRoom.RoomIndex = PlacedRooms.Num();
 		NewRoom.Depth = ExistingRoom.Depth + 1;
 		NewRoom.ConnectedRoomIndices.Add(ExistingRoomIdx);
+		// The new room's used slot faces NeededDir (opposite the existing slot).
+		NewRoom.OpenDirections.AddUnique(NewTemplate->ConnectionSlots[CompatibleSlotIdx].Direction);
 
 		const int32 NewRoomIdx = PlacedRooms.Num();
 
 		// Update existing room connections
 		PlacedRooms[ExistingRoomIdx].ConnectedRoomIndices.Add(NewRoomIdx);
+		PlacedRooms[ExistingRoomIdx].OpenDirections.AddUnique(ExistingSlot.Direction);
 
 		PlacedRooms.Add(NewRoom);
 
@@ -307,6 +310,8 @@ AARPGBlockoutRoom* AARPGLevelGenerator::SpawnBlockoutForRoom(const FPlacedRoom& 
 #if WITH_EDITOR
 	Blockout->SetActorLabel(FString::Printf(TEXT("Room_%d_%s"), Room.RoomIndex, *Room.Template->TemplateID.ToString()));
 #endif
+
+	Blockout->InitRoom(Room.Template->RoomSize, EBlockoutRoomPurpose::SmallRoom, Room.OpenDirections);
 
 	return Blockout;
 }
