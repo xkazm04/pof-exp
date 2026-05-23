@@ -55,6 +55,10 @@ def ensure_input_actions():
         if not asset_lib.does_asset_exist(path):
             if asset_lib.duplicate_asset(IA_ATTACK, path) is None:
                 raise RuntimeError("Failed to duplicate IA_Attack -> " + path)
+            # duplicate_asset creates the asset in memory but does not flush the
+            # package to disk — save explicitly or the .uasset never persists and
+            # the IMC/controller references to it dangle.
+            asset_lib.save_asset(path)
             unreal.log("[wire_combat] created " + path)
         actions[name] = asset_lib.load_asset(path)
     return actions
