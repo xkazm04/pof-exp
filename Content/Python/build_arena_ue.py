@@ -353,24 +353,30 @@ def add_atmosphere(actor_subsystem):
     ppv.set_editor_property("unbound", True)
 
     settings = ppv.get_editor_property("settings")
-    settings.set_editor_property("auto_exposure_min_brightness", 0.5)
-    settings.set_editor_property("b_override_auto_exposure_min_brightness", True)
-    settings.set_editor_property("auto_exposure_max_brightness", 2.0)
-    settings.set_editor_property("b_override_auto_exposure_max_brightness", True)
+    # Keep the arena dark and moody: a low exposure floor + negative EV bias so
+    # the dark dungeon-stone reads dark (a bright floor makes the tiling grid
+    # pop; in shadow it recedes).
+    settings.set_editor_property("auto_exposure_min_brightness", 0.05)
+    settings.set_editor_property("override_auto_exposure_min_brightness", True)
+    settings.set_editor_property("auto_exposure_max_brightness", 1.5)
+    settings.set_editor_property("override_auto_exposure_max_brightness", True)
+    settings.set_editor_property("auto_exposure_bias", -1.5)
+    settings.set_editor_property("override_auto_exposure_bias", True)
     settings.set_editor_property("bloom_intensity", 0.5)
-    settings.set_editor_property("b_override_bloom_intensity", True)
+    settings.set_editor_property("override_bloom_intensity", True)
     settings.set_editor_property("vignette_intensity", 0.4)
-    settings.set_editor_property("b_override_vignette_intensity", True)
+    settings.set_editor_property("override_vignette_intensity", True)
     settings.set_editor_property("color_saturation",
                                  unreal.Vector4(1.1, 1.1, 1.1, 1.0))
-    settings.set_editor_property("b_override_color_saturation", True)
+    settings.set_editor_property("override_color_saturation", True)
     ppv.set_editor_property("settings", settings)
 
     # Read back the scalar values to confirm the field names are correct.
     chk = ppv.get_editor_property("settings")
-    _log("PostProcess bloom=%.2f vignette=%.2f autoexp=[%.2f,%.2f]" % (
+    _log("PostProcess bloom=%.2f vignette=%.2f exp_bias=%.2f autoexp=[%.2f,%.2f]" % (
         chk.get_editor_property("bloom_intensity"),
         chk.get_editor_property("vignette_intensity"),
+        chk.get_editor_property("auto_exposure_bias"),
         chk.get_editor_property("auto_exposure_min_brightness"),
         chk.get_editor_property("auto_exposure_max_brightness")))
 
@@ -379,10 +385,21 @@ def add_atmosphere(actor_subsystem):
         unreal.ExponentialHeightFog, unreal.Vector(0.0, 0.0, 0.0))
     fog.set_actor_label("Arena_HeightFog")
     fog_comp = fog.get_editor_property("component")
-    fog_comp.set_editor_property("fog_density", 0.02)
-    fog_comp.set_editor_property("fog_height_falloff", 0.2)
-    fog_comp.set_editor_property("fog_inscattering_color",
-                                 unreal.LinearColor(0.4, 0.45, 0.6, 1.0))
+    # Exponential fog density is tuned for km-scale views; in a 20 m arena it
+    # must be far higher than the 0.02 default to register as visible haze.
+    fog_comp.set_editor_property("fog_density", 0.5)
+    fog_comp.set_editor_property("fog_height_falloff", 0.15)
+    # The inscattering colour property was renamed across UE versions
+    # (fog_inscattering_color -> fog_inscattering_luminance); try both so a
+    # name mismatch can't abort the level save.
+    tint = unreal.LinearColor(0.4, 0.45, 0.6, 1.0)
+    for prop in ("fog_inscattering_luminance", "fog_inscattering_color"):
+        try:
+            fog_comp.set_editor_property(prop, tint)
+            _log("Fog tint set via %s" % prop)
+            break
+        except Exception:
+            continue
     _log("Spawned PostProcessVolume + ExponentialHeightFog")
 
 
@@ -546,3 +563,13 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # UE 5.7's Interchange FBX importer needs a Slate application, so this
+    # script must run under the FULL editor (-ExecutePythonScript), NOT the
+    # -run=pythonscript commandlet (which asserts CurrentApplication.IsValid()).
+    # Under the full editor there is no commandlet to end the process, so quit
+    # the editor once the work is done.
+    try:
+        if unreal.is_editor():
+            unreal.SystemLibrary.quit_editor()
+    except Exception:
+        pass

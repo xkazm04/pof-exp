@@ -7,7 +7,7 @@ OUT = os.path.join(os.path.dirname(bpy.data.filepath) or os.path.dirname(__file_
 ARENA = 20.0           # floor is 20 m square
 WALL_H = 5.0           # wall height (m)
 WALL_T = 0.5           # wall thickness (m)
-TILE_METERS = 4.0      # world metres per texture repeat (world-aligned UVs)
+TILE_METERS = 8.0      # world metres per texture repeat (world-aligned UVs)
 
 # --- clean scene -----------------------------------------------------------
 bpy.ops.wm.read_factory_settings(use_empty=True)
