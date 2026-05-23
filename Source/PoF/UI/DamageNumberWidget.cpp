@@ -32,6 +32,10 @@ TSharedRef<SWidget> UDamageNumberWidget::RebuildWidget()
 			DamageText = WidgetTree->ConstructWidget<UTextBlock>(
 				UTextBlock::StaticClass(), TEXT("DamageText"));
 			DamageText->SetJustification(ETextJustify::Center);
+			// A drop shadow keeps numbers readable over bright scenes — the
+			// text analogue of the explicit-ProgressBar-style lesson.
+			DamageText->SetShadowOffset(FVector2D(1.5f, 1.5f));
+			DamageText->SetShadowColorAndOpacity(FLinearColor(0.f, 0.f, 0.f, 0.85f));
 
 			if (UCanvasPanelSlot* TextSlot = RootCanvas->AddChildToCanvas(DamageText))
 			{
