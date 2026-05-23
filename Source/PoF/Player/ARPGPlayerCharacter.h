@@ -400,9 +400,11 @@ private:
 	float InteractionScanTimer = 0.f;
 
 	// Ability loadout: SlotIndex (0..N-1) -> AbilityClass. EditDefaultsOnly so the
-	// default hotbar can be authored per-Blueprint (BP_VSPlayer); runtime code still
-	// reassigns via AssignAbilityToSlot.
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities")
+	// default hotbar can be authored per-Blueprint (BP_VSPlayer) and set via Python on
+	// the CDO; runtime code reassigns via AssignAbilityToSlot. (No BlueprintReadOnly:
+	// the member is private — GetLoadout() is the Blueprint accessor — and UHT rejects
+	// BlueprintReadOnly on private members.)
+	UPROPERTY(EditDefaultsOnly, Category = "Abilities")
 	TMap<int32, TSubclassOf<UGameplayAbility>> AbilityLoadout;
 
 	// Respawn
