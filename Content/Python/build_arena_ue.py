@@ -124,7 +124,9 @@ def import_arena_mesh():
         sm_data.set_editor_property("import_uniform_scale", ARENA_IMPORT_SCALE)
         sm_data.set_editor_property("combine_meshes", True)
         sm_data.set_editor_property("auto_generate_collision", True)
-        sm_data.set_editor_property("generate_lightmap_u_vs", True)
+        # Blender now authors UV1 as the lightmap (uv.lightmap_pack); don't
+        # auto-generate a 3rd channel.
+        sm_data.set_editor_property("generate_lightmap_u_vs", False)
         sm_data.set_editor_property("convert_scene", True)
 
         task = unreal.AssetImportTask()
@@ -160,6 +162,15 @@ def import_arena_mesh():
             _log("Set collision_trace_flag = CTF_USE_COMPLEX_AS_SIMPLE")
         else:
             unreal.log_warning("[build_arena_ue] SM_Arena has no body_setup")
+
+        # Lightmap: use Blender-authored UV channel 1 + a modest resolution.
+        mesh.set_editor_property("light_map_coordinate_index", 1)
+        mesh.set_editor_property("light_map_resolution", 256)
+        try:
+            num_uv = mesh.get_num_uv_channels(0)
+        except Exception:
+            num_uv = -1
+        _log("SM_Arena lightmap: coord_index=1, res=256, uv_channels=%d" % num_uv)
 
         asset_lib.save_asset(SM_ARENA_PATH)
 
@@ -333,6 +344,30 @@ def assign_materials(mesh):
 # Section 4b: Atmosphere -- post-process volume + height fog
 # ---------------------------------------------------------------------------
 
+def add_lightmass_importance_volume(actor_subsystem):
+    """Spawn a Lightmass Importance Volume around the arena (idempotent).
+
+    Best-effort: it focuses bake quality + builds the volumetric lightmap that
+    lights the movable player/enemy. Not load-bearing for "not black" -- if
+    spawning/sizing fails, Lightmass falls back to the level bounds.
+    """
+    try:
+        for actor in actor_subsystem.get_all_level_actors():
+            if isinstance(actor, unreal.LightmassImportanceVolume):
+                actor_subsystem.destroy_actor(actor)
+        liv = actor_subsystem.spawn_actor_from_class(
+            unreal.LightmassImportanceVolume, unreal.Vector(0.0, 0.0, 200.0))
+        liv.set_actor_label("Arena_LightmassImportance")
+        # Default volume brush is a ~200uu cube; scale to cover the ~2050uu
+        # arena + headroom (~4800x4800x1600 uu).
+        liv.set_actor_scale3d(unreal.Vector(24.0, 24.0, 8.0))
+        _log("Spawned LightmassImportanceVolume (scale 24,24,8)")
+    except Exception as exc:
+        unreal.log_warning(
+            "[build_arena_ue] LightmassImportanceVolume failed (%s); "
+            "bake will use level bounds" % str(exc))
+
+
 def add_atmosphere(actor_subsystem):
     """Spawn an unbound PostProcessVolume + ExponentialHeightFog (idempotent).
 
@@ -369,10 +404,36 @@ def add_atmosphere(actor_subsystem):
     settings.set_editor_property("color_saturation",
                                  unreal.Vector4(1.1, 1.1, 1.1, 1.0))
     settings.set_editor_property("override_color_saturation", True)
+    # Scope baked GI to this volume instead of flipping the project off Lumen:
+    # GI method None -> the arena uses baked static lighting + skylight only.
+    # Other maps (sibling sessions) keep the project-default Lumen.
+    gi_scoped = False
+    try:
+        settings.set_editor_property(
+            "dynamic_global_illumination_method",
+            unreal.DynamicGlobalIlluminationMethod.NONE)
+        settings.set_editor_property(
+            "override_dynamic_global_illumination_method", True)
+        settings.set_editor_property(
+            "reflection_method", unreal.ReflectionMethod.NONE)
+        settings.set_editor_property("override_reflection_method", True)
+        gi_scoped = True
+    except Exception as exc:
+        unreal.log_warning(
+            "[build_arena_ue] PPV GI override failed (%s); baked GI may need "
+            "the global DefaultEngine.ini r.DynamicGlobalIlluminationMethod=0 "
+            "flip" % str(exc))
     ppv.set_editor_property("settings", settings)
 
     # Read back the scalar values to confirm the field names are correct.
     chk = ppv.get_editor_property("settings")
+    if gi_scoped:
+        try:
+            _log("PPV GI method = %s (None = baked, scoped to this level)"
+                 % str(chk.get_editor_property(
+                     "dynamic_global_illumination_method")))
+        except Exception:
+            pass
     _log("PostProcess bloom=%.2f vignette=%.2f exp_bias=%.2f autoexp=[%.2f,%.2f]" % (
         chk.get_editor_property("bloom_intensity"),
         chk.get_editor_property("vignette_intensity"),
@@ -508,37 +569,31 @@ def rebuild_level():
                 unreal.log_warning(
                     "[build_arena_ue] expected actor not found: " + label)
 
-        # --- Force lights Movable so the STATIC arena is lit without a bake --
-        # The arena StaticMesh is STATIC mobility and this pipeline never runs
-        # Lightmass. With STATIONARY/STATIC lights the un-baked arena renders
-        # pitch black (UE shows "LIGHTING NEEDS TO BE REBUILT"). Movable lights
-        # light it fully dynamically -- no build step required.
-        #
-        # The DirectionalLight is also angled down (pitch -50 deg) and given a
-        # healthy intensity: at its default rotation (0,0,0) it points straight
-        # along +X, grazing the floor at ~0 deg so the floor reads near-black.
-        # The SkyLight intensity is raised so walls/floor in shadow still read.
+        # --- Lights -> Stationary for a baked-GI arena -----------------------
+        # The static arena gets baked GI + soft shadows from the Lightmass bake;
+        # the movable player/enemy get a dynamic shadow from the Stationary
+        # directional + GI from the volumetric lightmap. NOTE: Stationary lights
+        # render the static arena BLACK until a Lightmass bake runs -- the bake
+        # (ResavePackages -buildlighting, or a manual editor Build Lighting) is a
+        # required follow-up step, gated by the "lit, not black" verification.
         for actor in actor_subsystem.get_all_level_actors():
             if isinstance(actor, unreal.DirectionalLight):
                 actor.set_actor_rotation(
                     unreal.Rotator(0.0, -50.0, -35.0), False)
                 for comp in actor.get_components_by_class(
                         unreal.DirectionalLightComponent):
-                    comp.set_mobility(unreal.ComponentMobility.MOVABLE)
+                    comp.set_mobility(unreal.ComponentMobility.STATIONARY)
                     comp.set_editor_property("intensity", 6.0)
-                _log("DirectionalLight -> Movable, pitch -50, intensity 6.0")
+                _log("DirectionalLight -> Stationary, pitch -50, intensity 6.0")
             elif isinstance(actor, unreal.SkyLight):
                 for comp in actor.get_components_by_class(
                         unreal.SkyLightComponent):
-                    comp.set_mobility(unreal.ComponentMobility.MOVABLE)
+                    comp.set_mobility(unreal.ComponentMobility.STATIONARY)
                     comp.set_editor_property("intensity", 3.0)
-                    try:
-                        comp.set_editor_property("real_time_capture", True)
-                    except Exception:
-                        pass
-                _log("SkyLight -> Movable, intensity 3.0, real-time capture")
+                _log("SkyLight -> Stationary, intensity 3.0")
 
         add_atmosphere(actor_subsystem)
+        add_lightmass_importance_volume(actor_subsystem)
 
         level_subsystem.save_current_level()
         _log("Saved level: " + LEVEL_PATH)
