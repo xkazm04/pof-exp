@@ -7,6 +7,7 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/ARPGAttributeSet.h"
 #include "AbilitySystem/ARPGGameplayTags.h"
+#include "GameplayEffectExtension.h"
 #include "AbilitySystem/ARPGAbilityUnlockComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -54,6 +55,21 @@ AARPGPlayerCharacter::AARPGPlayerCharacter()
 void AARPGPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// GAS owns Health/MaxHealth. Mirror them into the deprecated floats whenever
+	// the GAS attributes change, so the legacy float readers + OnHealthChanged
+	// listeners stay in lockstep with the source of truth.
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		ASC->GetGameplayAttributeValueChangeDelegate(UARPGAttributeSet::GetHealthAttribute())
+			.AddUObject(this, &AARPGPlayerCharacter::OnGASHealthChanged);
+		ASC->GetGameplayAttributeValueChangeDelegate(UARPGAttributeSet::GetMaxHealthAttribute())
+			.AddUObject(this, &AARPGPlayerCharacter::OnGASHealthChanged);
+
+		// Seed the floats from GAS so the initial broadcast reflects the source of truth.
+		Health = ReadGASHealth(/*bMax=*/false, Health);
+		MaxHealth = ReadGASHealth(/*bMax=*/true, MaxHealth);
+	}
 
 	// Broadcast initial values so any listening UI gets correct state
 	OnHealthChanged.Broadcast(Health, MaxHealth);
@@ -118,6 +134,40 @@ float AARPGPlayerCharacter::Heal(float HealAmount)
 	}
 
 	return ActualHeal;
+}
+
+// --- GAS-backed health (source of truth = UARPGAttributeSet) ---
+
+float AARPGPlayerCharacter::ReadGASHealth(bool bMax, float Fallback) const
+{
+	if (const UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		const FGameplayAttribute Attr = bMax
+			? UARPGAttributeSet::GetMaxHealthAttribute()
+			: UARPGAttributeSet::GetHealthAttribute();
+		bool bFound = false;
+		const float Val = ASC->GetGameplayAttributeValue(Attr, bFound);
+		if (bFound) { return Val; }
+	}
+	return Fallback; // pre-possession / no ASC yet
+}
+
+float AARPGPlayerCharacter::GetHealth() const     { return ReadGASHealth(/*bMax=*/false, Health); }
+float AARPGPlayerCharacter::GetMaxHealth() const  { return ReadGASHealth(/*bMax=*/true, MaxHealth); }
+
+float AARPGPlayerCharacter::GetHealthPercent() const
+{
+	const float Max = GetMaxHealth();
+	return Max > 0.f ? GetHealth() / Max : 0.f;
+}
+
+void AARPGPlayerCharacter::OnGASHealthChanged(const FOnAttributeChangeData& /*Data*/)
+{
+	// Re-read both from GAS (the handler is shared by Health + MaxHealth changes),
+	// mirror into the deprecated floats, and re-broadcast the legacy delegate.
+	Health = ReadGASHealth(/*bMax=*/false, Health);
+	MaxHealth = ReadGASHealth(/*bMax=*/true, MaxHealth);
+	OnHealthChanged.Broadcast(Health, MaxHealth);
 }
 
 // =========================================================================

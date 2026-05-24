@@ -8,6 +8,7 @@ class UAIPerceptionStimuliSourceComponent;
 class UARPGAbilityUnlockComponent;
 class UArrowComponent;
 class UWidgetComponent;
+struct FOnAttributeChangeData;
 
 // --- Delegates for HUD/UI binding ---
 
@@ -58,14 +59,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Combat|Health")
 	float Heal(float HealAmount);
 
+	// GAS (UARPGAttributeSet::Health) is the source of truth — these read it via
+	// the ASC and fall back to the mirrored float before the ASC exists. See the
+	// OnGASHealthChanged binding in BeginPlay that keeps the float in lockstep.
 	UFUNCTION(BlueprintPure, Category = "Combat|Health")
-	float GetHealth() const { return Health; }
+	float GetHealth() const;
 
 	UFUNCTION(BlueprintPure, Category = "Combat|Health")
-	float GetMaxHealth() const { return MaxHealth; }
+	float GetMaxHealth() const;
 
 	UFUNCTION(BlueprintPure, Category = "Combat|Health")
-	float GetHealthPercent() const { return MaxHealth > 0.f ? Health / MaxHealth : 0.f; }
+	float GetHealthPercent() const;
 
 	UFUNCTION(BlueprintPure, Category = "Combat|Health")
 	bool IsAlive() const { return bIsAlive; }
@@ -285,6 +289,10 @@ protected:
 	// Health / Mana tuning
 	// =====================================================================
 
+	// DEPRECATED as a source of truth: GAS (UARPGAttributeSet) owns Health/MaxHealth.
+	// These floats are MIRRORED from GAS by OnGASHealthChanged and read only as a
+	// pre-ASC fallback. Do not write them directly expecting the HUD to follow —
+	// apply a GameplayEffect to the ASC instead.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Health")
 	float MaxHealth = 100.f;
 
@@ -425,4 +433,10 @@ private:
 
 	/** Calculate required XP for the given level. */
 	float CalculateXPForLevel(int32 Level) const;
+
+	// --- GAS-backed health (source of truth = UARPGAttributeSet) ---
+	/** Read a GAS health attribute current value; returns Fallback if no ASC/AttributeSet yet. */
+	float ReadGASHealth(bool bMax, float Fallback) const;
+	/** GAS Health/MaxHealth change handler: mirrors the value into the deprecated float + broadcasts OnHealthChanged. */
+	void OnGASHealthChanged(const FOnAttributeChangeData& Data);
 };
