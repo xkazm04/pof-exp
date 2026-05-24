@@ -189,6 +189,43 @@ namespace ARPGVerify
 		return R.Finish();
 	}
 
+	/** One leaf self-check the registry iterates. Aggregates (Slice / SliceCI) are
+	 *  intentionally NOT in the registry — they would double-test, and SliceCI
+	 *  quits the process. Add a future ARPG.Verify.X by appending one entry. */
+	struct FVerifyEntry
+	{
+		const TCHAR* System;
+		bool (*Run)(UWorld* World);
+	};
+
+	static const FVerifyEntry GVerifyRegistry[] =
+	{
+		{ TEXT("Characters"), &VerifyCharacters },
+		{ TEXT("HUD"),        &VerifyHUD },
+		{ TEXT("Combat"),     &VerifyCombat },
+		{ TEXT("Loot"),       &VerifyLoot },
+	};
+
+	/** Iterates every registered leaf check; logs each entry's own PASS/FAIL line
+	 *  via its FReport, then emits a single ARPG.Verify.All: PASS / FAIL line
+	 *  naming the failed systems. */
+	static bool VerifyAll(UWorld* World)
+	{
+		FReport R(TEXT("All"));
+		TArray<FString> Failed;
+		for (const FVerifyEntry& E : GVerifyRegistry)
+		{
+			if (!E.Run(World))
+			{
+				Failed.Add(E.System);
+			}
+		}
+		R.Check(Failed.Num() == 0,
+			FString::Printf(TEXT("%d/%d leaves failed: %s"),
+				Failed.Num(), UE_ARRAY_COUNT(GVerifyRegistry), *FString::Join(Failed, TEXT(", "))));
+		return R.Finish();
+	}
+
 	/** Full slice self-check: structure + a real synchronous damage-pipeline proof. */
 	static bool VerifySlice(UWorld* World)
 	{
@@ -257,3 +294,11 @@ static FAutoConsoleCommandWithWorld GVerifySliceCI(
 		const bool bPass = ARPGVerify::VerifySlice(World);
 		FPlatformMisc::RequestExitWithStatus(/*Force=*/true, bPass ? 0 : 1);
 	}));
+
+// Iterates every leaf check in ARPGVerify::GVerifyRegistry. Excludes the Slice
+// aggregate (would double-test) and SliceCI (quits the process). A future
+// ARPG.Verify.X auto-joins by appending one entry to GVerifyRegistry above.
+static FAutoConsoleCommandWithWorld GVerifyAll(
+	TEXT("ARPG.Verify.All"),
+	TEXT("Iterate every registered ARPG.Verify.* leaf check; logs each plus a summary ARPG.Verify.All: PASS/FAIL."),
+	FConsoleCommandWithWorldDelegate::CreateLambda([](UWorld* World) { ARPGVerify::VerifyAll(World); }));
