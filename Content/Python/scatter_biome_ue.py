@@ -76,6 +76,10 @@ def main():
     scatter.set_editor_property("biome_definition", biome)
     scatter.set_editor_property("random_seed", SEED)
     scatter.set_editor_property("local_density_multiplier", DENSITY)
+    # Do NOT regenerate at runtime — that would rebuild the HISM instances with
+    # default collision and discard the edit-time NO_COLLISION set below. Keep
+    # the baked (no-collision) instances so the player passes through.
+    scatter.set_editor_property("generate_on_begin_play", False)
     # Bounds box spans above + through the floor for downward visibility traces.
     bounds = scatter.get_editor_property("scatter_bounds")
     bounds.set_box_extent(unreal.Vector(1000.0, 1000.0, 200.0))
