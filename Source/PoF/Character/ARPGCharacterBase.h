@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "AbilitySystemInterface.h"
+#include "Character/IARPGDefaultsProvider.h"
 #include "ARPGCharacterBase.generated.h"
 
 class UAbilitySystemComponent;
@@ -47,7 +48,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDodgeInvulnEnd);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDeathFinished);
 
 UCLASS(Abstract)
-class POF_API AARPGCharacterBase : public ACharacter, public IAbilitySystemInterface
+class POF_API AARPGCharacterBase : public ACharacter, public IAbilitySystemInterface, public IARPGDefaultsProvider
 {
 	GENERATED_BODY()
 
@@ -327,6 +328,23 @@ protected:
 	/** Abilities granted to this character's ASC on possession (server). Set per-Blueprint. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities")
 	TArray<TSubclassOf<class UGameplayAbility>> DefaultAbilities;
+
+	/** Gameplay effects applied to self on possession (server) — e.g. startup attribute boosts. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities")
+	TArray<TSubclassOf<class UGameplayEffect>> DefaultEffects;
+
+	/** Input Mapping Contexts the player setup adds to the Enhanced Input subsystem.
+	 *  Surfaced via IARPGDefaultsProvider; the EnhancedInput add-site consumes this. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TArray<FARPGDefaultInputContext> DefaultInputContexts;
+
+public:
+	// --- IARPGDefaultsProvider ---
+	virtual const TArray<TSubclassOf<UGameplayAbility>>& GetDefaultAbilities() const override { return DefaultAbilities; }
+	virtual const TArray<TSubclassOf<UGameplayEffect>>& GetDefaultEffects() const override { return DefaultEffects; }
+	virtual const TArray<FARPGDefaultInputContext>& GetDefaultInputContexts() const override { return DefaultInputContexts; }
+
+protected:
 
 	// --- Attribute Initialization ---
 

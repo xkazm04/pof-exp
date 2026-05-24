@@ -124,14 +124,27 @@ void AARPGCharacterBase::PossessedBy(AController* NewController)
 		// Initialize attributes from Data Table + Curve Table
 		InitializeAttributes();
 
-		// Grant default abilities (server only)
+		// Grant defaults via IARPGDefaultsProvider (server only). Subclasses wire a
+		// new ability/effect by appending an entry to DefaultAbilities/DefaultEffects;
+		// nobody edits PossessedBy directly.
 		if (HasAuthority())
 		{
-			for (const TSubclassOf<UGameplayAbility>& AbilityClass : DefaultAbilities)
+			for (const TSubclassOf<UGameplayAbility>& AbilityClass : GetDefaultAbilities())
 			{
 				if (AbilityClass)
 				{
 					AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(AbilityClass, 1, INDEX_NONE, this));
+				}
+			}
+			for (const TSubclassOf<UGameplayEffect>& EffectClass : GetDefaultEffects())
+			{
+				if (!EffectClass) { continue; }
+				FGameplayEffectContextHandle Ctx = AbilitySystemComponent->MakeEffectContext();
+				Ctx.AddSourceObject(this);
+				const FGameplayEffectSpecHandle Spec = AbilitySystemComponent->MakeOutgoingSpec(EffectClass, 1.f, Ctx);
+				if (Spec.IsValid())
+				{
+					AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
 				}
 			}
 		}
