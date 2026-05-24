@@ -18,3 +18,7 @@ DECLARE_LOG_CATEGORY_EXTERN(LogARPGSave,       Log, All);
 DECLARE_LOG_CATEGORY_EXTERN(LogARPGUI,         Log, All);
 DECLARE_LOG_CATEGORY_EXTERN(LogARPGAudio,      Log, All);
 DECLARE_LOG_CATEGORY_EXTERN(LogARPGNetwork,    Log, All);
+// Lifecycle marker channel — use the ARPG_LIFECYCLE_LOG macro from
+// ARPGLifecycleLog.h at BeginPlay / PossessedBy / Bind* edges so a "why didn't
+// this run" diagnosis starts with `grep LogARPGLifecycle` in the live log.
+DECLARE_LOG_CATEGORY_EXTERN(LogARPGLifecycle,  Log, All);

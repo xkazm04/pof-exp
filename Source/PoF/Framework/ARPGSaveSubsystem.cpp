@@ -8,6 +8,7 @@
 #include "Character/ARPGBossCharacter.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+#include "Debug/ARPGLifecycleLog.h"
 
 // =========================================================================
 // Lifecycle
@@ -42,7 +43,7 @@ void UARPGSaveSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		});
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("[SaveSubsystem] Initialized (AutoSave=%s, Interval=%.0fs)"),
+	ARPG_LIFECYCLE_LOG(Log, TEXT("Initialized (AutoSave=%s, Interval=%.0fs)"),
 		bAutoSaveEnabled ? TEXT("ON") : TEXT("OFF"), AutoSaveIntervalSeconds);
 }
 
@@ -66,7 +67,7 @@ void UARPGSaveSubsystem::Deinitialize()
 	// Auto-save settings on shutdown
 	SaveSettings();
 
-	UE_LOG(LogTemp, Log, TEXT("[SaveSubsystem] Deinitialized — settings saved"));
+	ARPG_LIFECYCLE_LOG(Log, TEXT("Deinitialized — settings saved"));
 	Super::Deinitialize();
 }
 
