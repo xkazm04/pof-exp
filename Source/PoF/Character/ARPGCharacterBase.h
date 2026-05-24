@@ -281,6 +281,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Combat|Death")
 	void EnableRagdoll();
 
+	/**
+	 * Start a timer-driven corpse fade over Duration seconds, so a dead body
+	 * dissolves instead of popping out at SetLifeSpan. Best-effort and guarded:
+	 * creates a dynamic material instance per mesh slot and ramps the scalar
+	 * params "DissolveAmount" (0->1) and "Opacity" (1->0). If the material has
+	 * neither param the writes are harmless no-ops (gray-box safe).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Combat|Death")
+	void StartCorpseFade(float Duration);
+
 	/** Broadcast when death montage finishes and post-death logic runs. */
 	UPROPERTY(BlueprintAssignable, Category = "Events|Death")
 	FOnDeathFinished OnDeathFinished;
@@ -634,6 +644,15 @@ public:
 private:
 	bool bIsSprinting = false;
 	bool bWantsToSprint = false;
+
+	// --- Corpse fade (death dissolve) ---
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> CorpseFadeMIDs;
+	float CorpseFadeDuration = 0.f;
+	float CorpseFadeElapsed = 0.f;
+	FTimerHandle CorpseFadeTimerHandle;
+	/** Repeating timer step that advances the corpse-fade dissolve. */
+	void TickCorpseFade();
 
 	// Combat state
 	bool bComboWindowOpen = false;

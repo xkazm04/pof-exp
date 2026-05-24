@@ -164,10 +164,12 @@ void UGA_Death::OnDeathMontageFinished()
 	}
 	else
 	{
-		// Enemy: start destroy timer
+		// Enemy: start destroy timer + fade the corpse over the same window so it
+		// dissolves instead of popping out when the lifespan elapses.
 		if (EnemyDestroyDelay > 0.f)
 		{
 			Character->SetLifeSpan(EnemyDestroyDelay);
+			Character->StartCorpseFade(EnemyDestroyDelay);
 		}
 	}
 

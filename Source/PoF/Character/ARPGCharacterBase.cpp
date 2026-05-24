@@ -9,6 +9,10 @@
 #include "Curves/CurveFloat.h"
 #include "Engine/CurveTable.h"
 #include "MotionWarpingComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
 #include "AbilitySystem/ARPGAttributeSet.h"
 #include "AbilitySystem/ARPGAttributeInitData.h"
 #include "AbilitySystem/ARPGGameplayTags.h"
@@ -832,6 +836,57 @@ void AARPGCharacterBase::EnableRagdoll()
 	MeshComp->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
 
 	UE_LOG(LogTemp, Log, TEXT("[Death] Ragdoll enabled for %s"), *GetName());
+}
+
+void AARPGCharacterBase::StartCorpseFade(float Duration)
+{
+	if (Duration <= 0.f) return;
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	UWorld* World = GetWorld();
+	if (!MeshComp || !World) return;
+
+	// Create a dynamic material instance per slot so we can animate scalar params.
+	CorpseFadeMIDs.Reset();
+	const int32 NumMats = MeshComp->GetNumMaterials();
+	for (int32 i = 0; i < NumMats; ++i)
+	{
+		if (UMaterialInstanceDynamic* MID = MeshComp->CreateAndSetMaterialInstanceDynamic(i))
+		{
+			CorpseFadeMIDs.Add(MID);
+		}
+	}
+	if (CorpseFadeMIDs.Num() == 0) return; // nothing to fade
+
+	CorpseFadeDuration = Duration;
+	CorpseFadeElapsed = 0.f;
+
+	// ~20 fps fade steps — cheap and smooth enough for a dissolving corpse.
+	World->GetTimerManager().SetTimer(
+		CorpseFadeTimerHandle, this, &AARPGCharacterBase::TickCorpseFade, 0.05f, /*bLoop=*/true);
+}
+
+void AARPGCharacterBase::TickCorpseFade()
+{
+	CorpseFadeElapsed += 0.05f;
+	const float Alpha = (CorpseFadeDuration > 0.f)
+		? FMath::Clamp(CorpseFadeElapsed / CorpseFadeDuration, 0.f, 1.f)
+		: 1.f;
+
+	for (UMaterialInstanceDynamic* MID : CorpseFadeMIDs)
+	{
+		if (!MID) continue;
+		// Support either convention; a missing scalar param is a harmless no-op.
+		MID->SetScalarParameterValue(TEXT("DissolveAmount"), Alpha);
+		MID->SetScalarParameterValue(TEXT("Opacity"), 1.f - Alpha);
+	}
+
+	if (Alpha >= 1.f)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(CorpseFadeTimerHandle);
+		}
+	}
 }
 
 // =========================================================================
