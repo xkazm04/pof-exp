@@ -60,6 +60,33 @@ def make_param_sampler(material, param_name, x, y, sampler_type, group="Textures
     return node
 
 
+def connect_blended_normal(material, base_normal, detail_normal):
+    """Blend base + detail normals (angle-corrected) into MP_NORMAL (game §3).
+    Returns False if the engine blend function is unavailable or the inputs
+    can't be wired -- the caller then connects the base normal alone, so the
+    master always builds with a correct (if un-detailed) normal."""
+    fn_path = ("/Engine/Functions/Engine_MaterialFunctions02/"
+               "Texturing/BlendAngleCorrectedNormals")
+    func = asset_lib.load_asset(fn_path) if asset_lib.does_asset_exist(fn_path) else None
+    if func is None:
+        unreal.log_warning("[build_master_material] BlendAngleCorrectedNormals missing; detail normal skipped")
+        return False
+    try:
+        call = mat_lib.create_material_expression(
+            material, unreal.MaterialExpressionMaterialFunctionCall, -150, 60)
+        call.set_material_function(func)
+        base_ok = mat_lib.connect_material_expressions(base_normal, "RGB", call, "BaseNormal")
+        det_ok = mat_lib.connect_material_expressions(detail_normal, "RGB", call, "AdditionalNormal")
+        if base_ok and det_ok:
+            mat_lib.connect_material_property(call, "", unreal.MaterialProperty.MP_NORMAL)
+            return True
+        unreal.log_warning("[build_master_material] normal-blend inputs failed; using base normal")
+        return False
+    except Exception as exc:
+        unreal.log_warning("[build_master_material] detail-normal blend failed: " + str(exc))
+        return False
+
+
 def main():
     _log("=== build M_ARPG_Surface_Master START ===")
     folder, name = split_path(MASTER_PATH)
@@ -103,11 +130,30 @@ def main():
     mat_lib.connect_material_expressions(tint, "RGB", base_mul, "B")
     mat_lib.connect_material_property(base_mul, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
-    # --- Normal ---------------------------------------------------------------
+    # --- Normal (base) --------------------------------------------------------
     normal = make_param_sampler(material, "Normal", -400, 0,
                                 unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
     connect_uv(uv_mul, normal)
-    mat_lib.connect_material_property(normal, "RGB", unreal.MaterialProperty.MP_NORMAL)
+
+    # --- Detail normal (game §3): a high-tiling normal mixed over the base to
+    #     break up the tiling grid without changing UVs. Its texture param
+    #     defaults to unset, so existing instances (which don't set DetailNormal)
+    #     are visually unchanged until a detail texture is assigned.
+    detail_tiling = mat_lib.create_material_expression(
+        material, unreal.MaterialExpressionScalarParameter, -900, 360)
+    detail_tiling.set_editor_property("parameter_name", "DetailTiling")
+    detail_tiling.set_editor_property("default_value", 8.0)
+    detail_tiling.set_editor_property("group", "Detail")
+    detail_uv_mul = mat_lib.create_material_expression(
+        material, unreal.MaterialExpressionMultiply, -700, 320)
+    mat_lib.connect_material_expressions(texcoord, "", detail_uv_mul, "A")
+    mat_lib.connect_material_expressions(detail_tiling, "", detail_uv_mul, "B")
+    detail_normal = make_param_sampler(material, "DetailNormal", -400, 180,
+                                       unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL, group="Detail")
+    connect_uv(detail_uv_mul, detail_normal)
+
+    if not connect_blended_normal(material, normal, detail_normal):
+        mat_lib.connect_material_property(normal, "RGB", unreal.MaterialProperty.MP_NORMAL)
 
     # --- Roughness ------------------------------------------------------------
     rough = make_param_sampler(material, "Roughness", -400, 260,
