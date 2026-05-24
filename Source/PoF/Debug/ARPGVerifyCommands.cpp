@@ -12,6 +12,7 @@
 #include "AbilitySystem/ARPGAttributeSet.h"
 #include "AbilitySystem/ARPGGameplayTags.h"
 #include "AbilitySystem/Effects/GE_Damage.h"
+#include "Loot/ARPGWorldItem.h"
 
 // ARPG.Verify.<System> console commands — ad-hoc, operator-runnable system
 // checks usable live in PIE *and* in a cooked Shipping build (FAutoConsoleCommand
@@ -125,6 +126,39 @@ namespace ARPGVerify
 		return R.Finish();
 	}
 
+	/** Inner loot-drop check (does not emit PASS/FAIL — accumulates into the caller's
+	 *  FReport so the same helper backs both ARPG.Verify.Loot and the Slice aggregate).
+	 *  Applies lethal damage and counts AARPGWorldItem before/after. The death->drop
+	 *  chain is synchronous: ApplyGameplayEffectSpecToTarget -> attribute zero ->
+	 *  AARPGEnemyCharacter::OnEnemyDeath.Broadcast (ARPGEnemyCharacter.cpp:145) ->
+	 *  UARPGLootDropComponent::OnOwnerDeath -> World->SpawnActor<AARPGWorldItem>
+	 *  (ARPGLootDropComponent.cpp:163), so the post-count sees the new drop.
+	 *  IMPORTANT: targets AARPGEnemyCharacter specifically — the loot component binds
+	 *  OnEnemyDeath on the enemy class, NOT on test dummies (PS-1 lesson, see
+	 *  improvements/01-generation-quality/README.md). */
+	static void DoLootCheck(UWorld* World, AARPGPlayerCharacter* Player, AARPGEnemyCharacter* Enemy, FReport& R)
+	{
+		if (!World || !Player || !Enemy)
+		{
+			R.Check(false, TEXT("loot check skipped: missing world / player / enemy"));
+			return;
+		}
+		int32 BeforeItems = 0;
+		for (TActorIterator<AARPGWorldItem> It(World); It; ++It) { ++BeforeItems; }
+
+		const bool bApplied = ApplyDamage(Player, Enemy, /*Lethal=*/100000.f);
+		R.Check(bApplied, TEXT("could not apply lethal GE_Damage to enemy"));
+		const float After = GetHealth(Enemy);
+		R.Check(After <= 0.f,
+			FString::Printf(TEXT("enemy did not die from lethal damage (Health=%.1f)"), After));
+
+		int32 AfterItems = 0;
+		for (TActorIterator<AARPGWorldItem> It(World); It; ++It) { ++AfterItems; }
+		R.Check(AfterItems > BeforeItems,
+			FString::Printf(TEXT("no AARPGWorldItem dropped on enemy death (%d -> %d) — check the enemy has a UARPGLootDropComponent + a loot table that yields ≥1 drop"),
+				BeforeItems, AfterItems));
+	}
+
 	static bool VerifyCombat(UWorld* World)
 	{
 		FReport R(TEXT("Combat"));
@@ -141,6 +175,17 @@ namespace ARPGVerify
 			R.Check(After < Before,
 				FString::Printf(TEXT("enemy Health did not drop (%.1f -> %.1f)"), Before, After));
 		}
+		return R.Finish();
+	}
+
+	static bool VerifyLoot(UWorld* World)
+	{
+		FReport R(TEXT("Loot"));
+		AARPGPlayerCharacter* Player = FindPlayer(World);
+		AARPGEnemyCharacter* Enemy = FindEnemy(World);
+		R.Check(Player != nullptr, TEXT("no player"));
+		R.Check(Enemy != nullptr, TEXT("no enemy (loot drop is bound on AARPGEnemyCharacter — not on test dummies)"));
+		DoLootCheck(World, Player, Enemy, R);
 		return R.Finish();
 	}
 
@@ -164,6 +209,11 @@ namespace ARPGVerify
 			const float After = GetHealth(Enemy);
 			R.Check(After < Before,
 				FString::Printf(TEXT("damage had no effect (%.1f -> %.1f)"), Before, After));
+
+			// Loot drop is the last slice link: kill the enemy (lethal blow on top of
+			// the partial damage above) and assert an AARPGWorldItem appears.
+			// Destructive — running ARPG.Verify.Slice now also kills the test enemy.
+			DoLootCheck(World, Player, Enemy, R);
 		}
 		return R.Finish();
 	}
@@ -183,6 +233,11 @@ static FAutoConsoleCommandWithWorld GVerifyCombat(
 	TEXT("ARPG.Verify.Combat"),
 	TEXT("Apply real GE_Damage to an enemy and verify its Health drops. Logs PASS/FAIL."),
 	FConsoleCommandWithWorldDelegate::CreateLambda([](UWorld* World) { ARPGVerify::VerifyCombat(World); }));
+
+static FAutoConsoleCommandWithWorld GVerifyLoot(
+	TEXT("ARPG.Verify.Loot"),
+	TEXT("Apply lethal damage to an AARPGEnemyCharacter and verify an AARPGWorldItem drops (death->LootDropComponent->SpawnActor is synchronous). Logs ARPG.Verify.Loot: PASS/FAIL."),
+	FConsoleCommandWithWorldDelegate::CreateLambda([](UWorld* World) { ARPGVerify::VerifyLoot(World); }));
 
 static FAutoConsoleCommandWithWorld GVerifySlice(
 	TEXT("ARPG.Verify.Slice"),
