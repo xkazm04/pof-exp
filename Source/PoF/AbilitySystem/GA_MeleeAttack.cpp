@@ -10,6 +10,11 @@
 #include "Engine/OverlapResult.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
+#include "Camera/CameraShakeBase.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
 
 UGA_MeleeAttack::UGA_MeleeAttack()
 {
@@ -98,6 +103,17 @@ void UGA_MeleeAttack::EndAbility(
 	{
 		Character->SetAttacking(false);
 		Character->CloseComboWindow();
+	}
+
+	// Safety: if the ability ends mid hit-pause, restore time dilation so the world
+	// never gets stuck in slow-mo (the restore timer is bound to this instance).
+	if (UWorld* World = GetWorld())
+	{
+		if (HitStopTimerHandle.IsValid())
+		{
+			World->GetTimerManager().ClearTimer(HitStopTimerHandle);
+			UGameplayStatics::SetGlobalTimeDilation(World, 1.0f);
+		}
 	}
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
@@ -371,6 +387,9 @@ void UGA_MeleeAttack::ApplyMeleeDamageTo(AActor* Target, const FHitResult* Optio
 
 	SourceASC->ApplyGameplayEffectSpecToTarget(*Spec, TargetASC);
 
+	// Confirmed hit — fire the combat-feel polish (hit pause + camera shake).
+	ApplyHitFeel();
+
 	UE_LOG(LogTemp, Log, TEXT("[GA_MeleeAttack] Applied damage to %s: Base=%.1f x Combo=%.2f"),
 		*Target->GetName(), BaseDamage, ComboMultiplier);
 }
@@ -382,6 +401,48 @@ void UGA_MeleeAttack::OnMeleeHit(FGameplayEventData Payload)
 		? Payload.TargetData.Get(0)->GetHitResult()
 		: nullptr;
 	ApplyMeleeDamageTo(HitActor, HitResult);
+}
+
+void UGA_MeleeAttack::ApplyHitFeel()
+{
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+	if (!Avatar) return;
+	UWorld* World = Avatar->GetWorld();
+	if (!World) return;
+
+	// Hit pause: briefly dilate global time. The restore timer runs on dilated
+	// game time, so scale the rate by the dilation to restore after ~HitStopDuration
+	// of REAL time (otherwise the freeze would last HitStopDuration / dilation).
+	if (HitStopDuration > 0.f && HitStopTimeDilation < 1.f)
+	{
+		UGameplayStatics::SetGlobalTimeDilation(World, HitStopTimeDilation);
+		const float DilatedRate = FMath::Max(HitStopDuration * HitStopTimeDilation, KINDA_SMALL_NUMBER);
+		World->GetTimerManager().SetTimer(
+			HitStopTimerHandle, this, &UGA_MeleeAttack::RestoreTimeDilation, DilatedRate, /*bLoop=*/false);
+	}
+
+	// Camera shake on the instigating player's camera (guarded for headless / no PC).
+	if (HitCameraShake)
+	{
+		if (APawn* Pawn = Cast<APawn>(Avatar))
+		{
+			if (APlayerController* PC = Cast<APlayerController>(Pawn->GetController()))
+			{
+				PC->ClientStartCameraShake(HitCameraShake, HitCameraShakeScale);
+			}
+		}
+	}
+}
+
+void UGA_MeleeAttack::RestoreTimeDilation()
+{
+	if (AActor* Avatar = GetAvatarActorFromActorInfo())
+	{
+		if (UWorld* World = Avatar->GetWorld())
+		{
+			UGameplayStatics::SetGlobalTimeDilation(World, 1.0f);
+		}
+	}
 }
 
 void UGA_MeleeAttack::AdvanceCombo()

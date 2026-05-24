@@ -8,6 +8,7 @@ class UAnimMontage;
 class UGameplayEffect;
 class UAbilityTask_PlayMontageAndWait;
 class UAbilityTask_WaitGameplayEvent;
+class UCameraShakeBase;
 
 /**
  * Melee attack ability with montage-driven combo chaining.
@@ -114,6 +115,25 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|MotionWarping", meta = (ClampMin = "0", EditCondition = "bEnableAttackMagnetism"))
 	float WarpStopDistance = 100.f;
 
+	// --- Combat feel (hit pause + camera shake) ---
+	// These are the properties PoF's combat-feel panel emits onto (combat-feel-export.ts).
+
+	/** Real-time duration (s) of the global time-dilation freeze on a confirmed hit. 0 disables hit pause. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Feel", meta = (ClampMin = "0.0", ClampMax = "0.5"))
+	float HitStopDuration = 0.08f;
+
+	/** Global time dilation applied during the freeze (lower = harder freeze). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Feel", meta = (ClampMin = "0.01", ClampMax = "1.0"))
+	float HitStopTimeDilation = 0.1f;
+
+	/** Camera shake played on the instigating player's camera on a confirmed hit (optional). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Feel")
+	TSubclassOf<UCameraShakeBase> HitCameraShake;
+
+	/** Scale applied to the camera shake. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Feel", meta = (ClampMin = "0.0", ClampMax = "10.0"))
+	float HitCameraShakeScale = 1.0f;
+
 private:
 	/** Current combo section index (0-based). */
 	int32 CurrentComboIndex = 0;
@@ -185,4 +205,13 @@ private:
 
 	/** Build + apply the damage GameplayEffect to a resolved target (shared by both paths). */
 	void ApplyMeleeDamageTo(AActor* Target, const FHitResult* OptionalHit);
+
+	/** Combat feel on a confirmed hit: brief global time-dilation freeze + camera shake. */
+	void ApplyHitFeel();
+
+	/** Timer callback that restores global time dilation to 1.0 after the hit-pause. */
+	void RestoreTimeDilation();
+
+	/** Timer handle for the hit-pause restore. */
+	FTimerHandle HitStopTimerHandle;
 };
