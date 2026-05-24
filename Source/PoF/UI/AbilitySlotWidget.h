@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "UI/ARPGCodeWidgetBase.h"
 #include "AbilitySlotWidget.generated.h"
 
 class UImage;
@@ -13,7 +13,7 @@ class UTextBlock;
  * Cooldown sweep is driven externally by the parent AbilityBarWidget.
  */
 UCLASS()
-class POF_API UAbilitySlotWidget : public UUserWidget
+class POF_API UAbilitySlotWidget : public UARPGCodeWidgetBase
 {
 	GENERATED_BODY()
 
@@ -41,19 +41,22 @@ public:
 protected:
 	virtual void NativeConstruct() override;
 
-	UPROPERTY(meta = (BindWidget))
+	/** Build the slot tree in C++ (no companion Widget Blueprint). */
+	virtual void BuildTree() override;
+
+	UPROPERTY()
 	TObjectPtr<UImage> AbilityIcon;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY()
 	TObjectPtr<UImage> CooldownSweep;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY()
 	TObjectPtr<UTextBlock> CooldownText;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY()
 	TObjectPtr<UTextBlock> ManaCostText;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY()
 	TObjectPtr<UTextBlock> KeybindLabel;
 
 	/** Material instance used for the circular sweep. Must have a scalar param "Percent". */

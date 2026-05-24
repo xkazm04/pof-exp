@@ -22,6 +22,7 @@
 #include "Quest/ARPGQuestTypes.h"
 #include "UI/ARPGHUD.h"
 #include "GameplayCueManager.h"
+#include "HAL/IConsoleManager.h"
 
 AARPGPlayerCharacter::AARPGPlayerCharacter()
 {
@@ -632,6 +633,12 @@ void AARPGPlayerCharacter::UpdateDebugDisplay(float DeltaTime)
 {
 #if !UE_BUILD_SHIPPING
 	if (!GEngine) return;
+
+	// HUD/UI folder-04 §6: gated off by default — see ARPG.ShowDebugStats
+	// (registered in ARPGCharacterBase.cpp). Found once and cached.
+	static IConsoleVariable* CVarShowDebugStats =
+		IConsoleManager::Get().FindConsoleVariable(TEXT("ARPG.ShowDebugStats"));
+	if (CVarShowDebugStats && CVarShowDebugStats->GetInt() == 0) return;
 
 	// Health/Mana bar
 	GEngine->AddOnScreenDebugMessage(2, 0.f, FColor::Red,

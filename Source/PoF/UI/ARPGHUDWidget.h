@@ -1,13 +1,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "UI/ARPGCodeWidgetBase.h"
 #include "GameplayEffectTypes.h"
 #include "ARPGHUDWidget.generated.h"
 
 class UProgressBar;
 class UTextBlock;
 class UBorder;
+class UImage;
 class UAbilitySystemComponent;
 class AARPGPlayerCharacter;
 struct FGameplayAttribute;
@@ -18,7 +19,7 @@ struct FGameplayAttribute;
  * a pulsing red health bar when below 25%, XP bar, level display, and minimap placeholder.
  */
 UCLASS()
-class POF_API UARPGHUDWidget : public UUserWidget
+class POF_API UARPGHUDWidget : public UARPGCodeWidgetBase
 {
 	GENERATED_BODY()
 
@@ -39,32 +40,47 @@ protected:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual void NativeDestruct() override;
 
-	// --- Widget bindings (bind in UMG designer by matching names) ---
+	/** Build the HUD tree in C++ (no companion Widget Blueprint). */
+	virtual void BuildTree() override;
 
-	UPROPERTY(meta = (BindWidget))
+	// --- Widgets (constructed in BuildTree) ---
+
+	UPROPERTY()
 	TObjectPtr<UProgressBar> HealthBar;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY()
 	TObjectPtr<UTextBlock> HealthText;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY()
 	TObjectPtr<UProgressBar> ManaBar;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY()
 	TObjectPtr<UTextBlock> ManaText;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY()
 	TObjectPtr<UProgressBar> StaminaBar;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY()
 	TObjectPtr<UProgressBar> XPBar;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY()
 	TObjectPtr<UTextBlock> LevelText;
 
 	/** Minimap placeholder — empty border that designers fill in later. */
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY()
 	TObjectPtr<UBorder> MinimapPlaceholder;
+
+	/** §4 hit indicator: full-screen red vignette, flashed on health loss. */
+	UPROPERTY()
+	TObjectPtr<UImage> HitVignette;
+
+	/** Speed the hit vignette fades back to 0 (≈ a 250 ms flash). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|HitIndicator")
+	float HitFlashDecay = 4.f;
+
+	/** Peak opacity of the hit vignette when the player takes damage. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|HitIndicator")
+	float HitFlashPeak = 0.7f;
 
 	// --- Tuning ---
 
@@ -129,6 +145,9 @@ private:
 
 	// Low-health pulse accumulator
 	float PulseTime = 0.f;
+
+	// §4 hit-indicator vignette opacity (decays to 0 each tick)
+	float HitFlashAlpha = 0.f;
 
 	void UpdateHealthDisplay();
 	void UpdateManaDisplay();

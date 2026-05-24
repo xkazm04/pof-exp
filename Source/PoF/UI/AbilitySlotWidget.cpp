@@ -1,8 +1,89 @@
 #include "UI/AbilitySlotWidget.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Blueprint/WidgetTree.h"
+#include "Styling/CoreStyle.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/Texture2D.h"
+
+void UAbilitySlotWidget::BuildTree()
+{
+	if (!WidgetTree || AbilityIcon)
+	{
+		return; // no tree, or already built
+	}
+
+	UCanvasPanel* Root = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), FName(TEXT("SlotRoot")));
+	WidgetTree->RootWidget = Root;
+	if (!Root)
+	{
+		return;
+	}
+
+	const FVector2D SlotSize(64.f, 64.f);
+
+	// Dark frame so an empty slot is still visible.
+	UImage* Frame = CreateImage(FName(TEXT("SlotFrame")), FLinearColor(0.05f, 0.05f, 0.07f, 0.85f));
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->AddChildToCanvas(Frame)))
+	{
+		S->SetAnchors(FAnchors(0.f, 0.f));
+		S->SetPosition(FVector2D::ZeroVector);
+		S->SetSize(SlotSize);
+	}
+
+	// Ability icon fills the slot (SetIcon swaps the brush texture).
+	AbilityIcon = CreateImage(FName(TEXT("AbilityIcon")), FLinearColor(0.5f, 0.5f, 0.5f, 1.f));
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->AddChildToCanvas(AbilityIcon)))
+	{
+		S->SetAnchors(FAnchors(0.f, 0.f));
+		S->SetPosition(FVector2D(2.f, 2.f));
+		S->SetSize(SlotSize - FVector2D(4.f, 4.f));
+	}
+
+	// Cooldown overlay — semi-transparent black, toggled by SetCooldownPercent.
+	CooldownSweep = CreateImage(FName(TEXT("CooldownSweep")), FLinearColor(0.f, 0.f, 0.f, 0.6f));
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->AddChildToCanvas(CooldownSweep)))
+	{
+		S->SetAnchors(FAnchors(0.f, 0.f));
+		S->SetPosition(FVector2D(2.f, 2.f));
+		S->SetSize(SlotSize - FVector2D(4.f, 4.f));
+	}
+
+	const FSlateFontInfo KeyFont = FCoreStyle::GetDefaultFontStyle("Bold", 14);
+	const FSlateFontInfo SmallFont = FCoreStyle::GetDefaultFontStyle("Bold", 11);
+
+	// Keybind label — top-left.
+	KeybindLabel = CreateStyledTextBlock(FName(TEXT("KeybindLabel")), KeyFont, FLinearColor::White);
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->AddChildToCanvas(KeybindLabel)))
+	{
+		S->SetAnchors(FAnchors(0.f, 0.f));
+		S->SetPosition(FVector2D(4.f, 2.f));
+		S->SetAutoSize(true);
+	}
+
+	// Cooldown-remaining text — centre.
+	CooldownText = CreateStyledTextBlock(FName(TEXT("CooldownText")), KeyFont, FLinearColor::White);
+	CooldownText->SetJustification(ETextJustify::Center);
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->AddChildToCanvas(CooldownText)))
+	{
+		S->SetAnchors(FAnchors(0.5f, 0.5f));
+		S->SetAlignment(FVector2D(0.5f, 0.5f));
+		S->SetPosition(FVector2D::ZeroVector);
+		S->SetAutoSize(true);
+	}
+
+	// Mana cost — bottom-right.
+	ManaCostText = CreateStyledTextBlock(FName(TEXT("ManaCostText")), SmallFont, FLinearColor(0.5f, 0.7f, 1.f));
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->AddChildToCanvas(ManaCostText)))
+	{
+		S->SetAnchors(FAnchors(1.f, 1.f));
+		S->SetAlignment(FVector2D(1.f, 1.f));
+		S->SetPosition(FVector2D(-3.f, -2.f));
+		S->SetAutoSize(true);
+	}
+}
 
 void UAbilitySlotWidget::NativeConstruct()
 {

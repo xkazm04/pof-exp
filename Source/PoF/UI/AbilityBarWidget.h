@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "UI/ARPGCodeWidgetBase.h"
 #include "GameplayTagContainer.h"
 #include "AbilityBarWidget.generated.h"
 
@@ -46,7 +46,7 @@ struct FAbilitySlotData
  * Polls the player's ASC each tick for cooldown state.
  */
 UCLASS()
-class POF_API UAbilityBarWidget : public UUserWidget
+class POF_API UAbilityBarWidget : public UARPGCodeWidgetBase
 {
 	GENERATED_BODY()
 
@@ -70,6 +70,9 @@ protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
+	/** Build the bottom-centre slot container in C++ (no companion Widget Blueprint). */
+	virtual void BuildTree() override;
+
 	/** The widget class to instantiate for each slot. Must subclass UAbilitySlotWidget. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|AbilityBar")
 	TSubclassOf<UAbilitySlotWidget> SlotWidgetClass;
@@ -78,8 +81,8 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|AbilityBar")
 	TArray<FAbilitySlotData> Slots;
 
-	/** Container that holds the slot widgets. */
-	UPROPERTY(meta = (BindWidget))
+	/** Container that holds the slot widgets (built in BuildTree). */
+	UPROPERTY()
 	TObjectPtr<UHorizontalBox> SlotContainer;
 
 private:

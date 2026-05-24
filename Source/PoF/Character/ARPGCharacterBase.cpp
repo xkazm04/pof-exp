@@ -13,6 +13,16 @@
 #include "AbilitySystem/ARPGAttributeInitData.h"
 #include "AbilitySystem/ARPGGameplayTags.h"
 #include "AbilitySystem/Effects/GE_InitAttributes.h"
+#include "HAL/IConsoleManager.h"
+
+// HUD/UI folder-04 §6: engine on-screen debug stats are OFF by default. Flip them
+// on per dev session with `ARPG.ShowDebugStats 1`. They draw above all UMG and pin
+// to the screen corner, colliding with HUD elements and confounding vision checks.
+// Registered once here; ARPGPlayerCharacter reads it back via IConsoleManager.
+TAutoConsoleVariable<int32> CVarARPGShowDebugStats(
+	TEXT("ARPG.ShowDebugStats"), 0,
+	TEXT("Show on-screen debug stats (stamina/HP/MP/level/etc.). 0 = off (default), 1 = on."),
+	ECVF_Default);
 
 AARPGCharacterBase::AARPGCharacterBase()
 {
@@ -225,8 +235,8 @@ void AARPGCharacterBase::Tick(float DeltaTime)
 	UpdateCameraSway(DeltaTime);
 
 #if !UE_BUILD_SHIPPING
-	// Debug stamina display
-	if (GEngine)
+	// Debug stamina display (gated — see ARPG.ShowDebugStats)
+	if (GEngine && CVarARPGShowDebugStats.GetValueOnGameThread() != 0)
 	{
 		FString StateStr;
 		if (bIsSprinting) StateStr += TEXT("[SPRINTING] ");

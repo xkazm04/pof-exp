@@ -4,6 +4,7 @@
 #include "Components/CanvasPanelSlot.h"
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
+#include "Components/Image.h"
 
 TSharedRef<SWidget> UARPGCodeWidgetBase::RebuildWidget()
 {
@@ -75,4 +76,25 @@ UCanvasPanelSlot* UARPGCodeWidgetBase::AnchorTopCentre(UCanvasPanel* Canvas, UWi
 		else { Slot->SetSize(Size); }
 	}
 	return Slot;
+}
+
+UCanvasPanelSlot* UARPGCodeWidgetBase::AnchorBottomCentre(UCanvasPanel* Canvas, UWidget* Child, FVector2D Position, FVector2D Size, bool bAutoSize)
+{
+	UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(Canvas->AddChildToCanvas(Child));
+	if (Slot)
+	{
+		Slot->SetAnchors(FAnchors(0.5f, 1.f));
+		Slot->SetAlignment(FVector2D(0.5f, 1.f));
+		Slot->SetPosition(Position);
+		if (bAutoSize) { Slot->SetAutoSize(true); }
+		else { Slot->SetSize(Size); }
+	}
+	return Slot;
+}
+
+UImage* UARPGCodeWidgetBase::CreateImage(FName Name, const FLinearColor& Colour)
+{
+	UImage* Image = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), Name);
+	Image->SetBrush(MakeSolidBrush(Colour));
+	return Image;
 }

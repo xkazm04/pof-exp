@@ -18,6 +18,16 @@
 #include "AbilitySystemComponent.h"
 #include "Blueprint/UserWidget.h"
 
+AARPGHUD::AARPGHUD()
+{
+	// Default the slice-critical widget classes to the pure-C++ (reparented)
+	// classes so the HUD works with no companion Widget Blueprints. A Blueprint
+	// subclass of AARPGHUD may still override these. Other screen classes
+	// (inventory/quests/etc.) stay null and are simply absent until provided.
+	HUDWidgetClass = UARPGHUDWidget::StaticClass();
+	AbilityBarClass = UAbilityBarWidget::StaticClass();
+}
+
 void AARPGHUD::BeginPlay()
 {
 	Super::BeginPlay();

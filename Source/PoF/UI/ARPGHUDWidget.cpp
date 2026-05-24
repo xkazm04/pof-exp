@@ -5,6 +5,105 @@
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
 #include "Components/Border.h"
+#include "Components/Image.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Blueprint/WidgetTree.h"
+#include "Styling/CoreStyle.h"
+
+void UARPGHUDWidget::BuildTree()
+{
+	if (!WidgetTree || HealthBar)
+	{
+		return; // no tree, or already built
+	}
+
+	UCanvasPanel* Root = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), FName(TEXT("ARPGHUDRoot")));
+	WidgetTree->RootWidget = Root;
+	if (!Root)
+	{
+		return;
+	}
+
+	// --- §4 hit vignette: full-screen, behind the bars, starts invisible ---
+	HitVignette = CreateImage(FName(TEXT("HitVignette")), FLinearColor(0.8f, 0.f, 0.f, 1.f));
+	HitVignette->SetRenderOpacity(0.f);
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->AddChildToCanvas(HitVignette)))
+	{
+		S->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
+		S->SetOffsets(FMargin(0.f));
+	}
+
+	const FSlateFontInfo ValueFont = FCoreStyle::GetDefaultFontStyle("Bold", 13);
+	const FSlateFontInfo LevelFont = FCoreStyle::GetDefaultFontStyle("Bold", 16);
+	const float Left = 40.f;
+	const float BarW = 286.f;
+	float Y = 40.f;
+
+	auto AddBar = [&](UProgressBar* Bar, float PosY, float H)
+	{
+		if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->AddChildToCanvas(Bar)))
+		{
+			S->SetAnchors(FAnchors(0.f, 0.f));
+			S->SetPosition(FVector2D(Left, PosY));
+			S->SetSize(FVector2D(BarW, H));
+		}
+	};
+
+	auto AddOverlayText = [&](FName Name, float PosY, const FSlateFontInfo& Font) -> UTextBlock*
+	{
+		UTextBlock* T = CreateStyledTextBlock(Name, Font, FLinearColor::White);
+		if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->AddChildToCanvas(T)))
+		{
+			S->SetAnchors(FAnchors(0.f, 0.f));
+			S->SetPosition(FVector2D(Left + 6.f, PosY + 2.f));
+			S->SetAutoSize(true);
+		}
+		return T;
+	};
+
+	// Health bar + numeric text.
+	HealthBar = CreateStyledProgressBar(FName(TEXT("HealthBar")), HealthBarColor);
+	AddBar(HealthBar, Y, 22.f);
+	HealthText = AddOverlayText(FName(TEXT("HealthText")), Y, ValueFont);
+	Y += 28.f;
+
+	// Mana bar + numeric text.
+	ManaBar = CreateStyledProgressBar(FName(TEXT("ManaBar")), ManaBarColor);
+	AddBar(ManaBar, Y, 22.f);
+	ManaText = AddOverlayText(FName(TEXT("ManaText")), Y, ValueFont);
+	Y += 28.f;
+
+	// Stamina bar (thinner, no numeric text).
+	StaminaBar = CreateStyledProgressBar(FName(TEXT("StaminaBar")), StaminaBarColor);
+	AddBar(StaminaBar, Y, 12.f);
+	Y += 18.f;
+
+	// XP bar (thin) + level label to its right.
+	XPBar = CreateStyledProgressBar(FName(TEXT("XPBar")), XPBarColor);
+	XPBar->SetPercent(0.f);
+	AddBar(XPBar, Y, 8.f);
+
+	LevelText = CreateStyledTextBlock(FName(TEXT("LevelText")), LevelFont, FLinearColor(1.f, 0.95f, 0.6f));
+	LevelText->SetText(FText::FromString(TEXT("Lv 1")));
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->AddChildToCanvas(LevelText)))
+	{
+		S->SetAnchors(FAnchors(0.f, 0.f));
+		S->SetPosition(FVector2D(Left + BarW + 10.f, 40.f));
+		S->SetAutoSize(true);
+	}
+
+	// Minimap placeholder — top-right (designers fill it in later).
+	MinimapPlaceholder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), FName(TEXT("MinimapPlaceholder")));
+	MinimapPlaceholder->SetBrushColor(FLinearColor(0.f, 0.f, 0.f, 0.4f));
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->AddChildToCanvas(MinimapPlaceholder)))
+	{
+		S->SetAnchors(FAnchors(1.f, 0.f));
+		S->SetAlignment(FVector2D(1.f, 0.f));
+		S->SetPosition(FVector2D(-40.f, 40.f));
+		S->SetSize(FVector2D(180.f, 180.f));
+	}
+}
 
 void UARPGHUDWidget::NativeConstruct()
 {
@@ -95,6 +194,13 @@ void UARPGHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 			HealthBar->SetFillColorAndOpacity(HealthBarColor);
 		}
 	}
+
+	// --- §4 hit-indicator vignette: decay back to invisible (~250 ms flash) ---
+	if (HitVignette)
+	{
+		HitFlashAlpha = FMath::FInterpTo(HitFlashAlpha, 0.f, InDeltaTime, HitFlashDecay);
+		HitVignette->SetRenderOpacity(HitFlashAlpha);
+	}
 }
 
 void UARPGHUDWidget::NativeDestruct()
@@ -179,6 +285,11 @@ void UARPGHUDWidget::BindToPlayerCharacter(AARPGPlayerCharacter* Player)
 
 void UARPGHUDWidget::OnHealthChanged(const FOnAttributeChangeData& Data)
 {
+	// §4 hit indicator: flash the screen-edge vignette when health drops.
+	if (Data.NewValue < CurrentHealth)
+	{
+		HitFlashAlpha = HitFlashPeak;
+	}
 	CurrentHealth = Data.NewValue;
 	UpdateHealthDisplay();
 }

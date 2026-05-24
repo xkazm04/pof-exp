@@ -31,6 +31,8 @@ class POF_API AARPGHUD : public AHUD
 	GENERATED_BODY()
 
 public:
+	AARPGHUD();
+
 	virtual void BeginPlay() override;
 
 	// --- Widget access ---

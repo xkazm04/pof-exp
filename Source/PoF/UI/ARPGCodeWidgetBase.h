@@ -11,6 +11,7 @@ class UTextBlock;
 class UCanvasPanel;
 class UCanvasPanelSlot;
 class UWidget;
+class UImage;
 
 /**
  * Base for pure-C++ UMG widgets (no companion Widget Blueprint, no BindWidget).
@@ -65,4 +66,12 @@ protected:
 	/** Add Child to Canvas anchored+aligned top-centre. bAutoSize ignores Size. */
 	static UCanvasPanelSlot* AnchorTopCentre(UCanvasPanel* Canvas, UWidget* Child,
 		FVector2D Position, FVector2D Size, bool bAutoSize = false);
+
+	/** Add Child to Canvas anchored+aligned bottom-centre. bAutoSize ignores Size.
+	 *  Position is an offset from the bottom-centre (use negative Y to lift it up). */
+	static UCanvasPanelSlot* AnchorBottomCentre(UCanvasPanel* Canvas, UWidget* Child,
+		FVector2D Position, FVector2D Size, bool bAutoSize = false);
+
+	/** Construct a UImage into WidgetTree with a solid-colour brush. */
+	UImage* CreateImage(FName Name, const FLinearColor& Colour);
 };

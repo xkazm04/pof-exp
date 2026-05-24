@@ -3,6 +3,68 @@
 #include "AbilitySystem/ARPGAttributeSet.h"
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Blueprint/WidgetTree.h"
+#include "Styling/CoreStyle.h"
+
+void UEnemyHealthBarWidget::BuildTree()
+{
+	if (!WidgetTree || HealthBar)
+	{
+		return; // no tree, or already built
+	}
+
+	UCanvasPanel* Root = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), FName(TEXT("EnemyBarRoot")));
+	WidgetTree->RootWidget = Root;
+	if (!Root)
+	{
+		return;
+	}
+
+	const FVector2D Size(200.f, 52.f);
+	const FSlateFontInfo NameFont = FCoreStyle::GetDefaultFontStyle("Bold", 13);
+	const FSlateFontInfo SmallFont = FCoreStyle::GetDefaultFontStyle("Bold", 11);
+
+	// Enemy name — top-left.
+	EnemyNameText = CreateStyledTextBlock(FName(TEXT("EnemyNameText")), NameFont, FLinearColor(1.f, 0.85f, 0.3f));
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->AddChildToCanvas(EnemyNameText)))
+	{
+		S->SetAnchors(FAnchors(0.f, 0.f));
+		S->SetPosition(FVector2D(0.f, 0.f));
+		S->SetAutoSize(true);
+	}
+
+	// Level — top-right.
+	LevelText = CreateStyledTextBlock(FName(TEXT("LevelText")), SmallFont, NormalLevelColor);
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->AddChildToCanvas(LevelText)))
+	{
+		S->SetAnchors(FAnchors(1.f, 0.f));
+		S->SetAlignment(FVector2D(1.f, 0.f));
+		S->SetPosition(FVector2D(0.f, 0.f));
+		S->SetAutoSize(true);
+	}
+
+	// Health bar — full width, below the labels.
+	HealthBar = CreateStyledProgressBar(FName(TEXT("HealthBar")), BarColor);
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->AddChildToCanvas(HealthBar)))
+	{
+		S->SetAnchors(FAnchors(0.f, 0.f));
+		S->SetPosition(FVector2D(0.f, 24.f));
+		S->SetSize(FVector2D(Size.X, 16.f));
+	}
+
+	// Health text — centred over the bar.
+	HealthText = CreateStyledTextBlock(FName(TEXT("HealthText")), SmallFont, FLinearColor::White);
+	HealthText->SetJustification(ETextJustify::Center);
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->AddChildToCanvas(HealthText)))
+	{
+		S->SetAnchors(FAnchors(0.5f, 0.f));
+		S->SetAlignment(FVector2D(0.5f, 0.f));
+		S->SetPosition(FVector2D(0.f, 24.f));
+		S->SetAutoSize(true);
+	}
+}
 
 void UEnemyHealthBarWidget::NativeConstruct()
 {

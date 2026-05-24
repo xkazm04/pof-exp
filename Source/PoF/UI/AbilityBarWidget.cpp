@@ -5,6 +5,27 @@
 #include "AbilitySystemComponent.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/CanvasPanel.h"
+#include "Blueprint/WidgetTree.h"
+
+void UAbilityBarWidget::BuildTree()
+{
+	if (!WidgetTree || SlotContainer)
+	{
+		return; // no tree, or already built
+	}
+
+	UCanvasPanel* Root = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), FName(TEXT("AbilityBarRoot")));
+	WidgetTree->RootWidget = Root;
+	if (!Root)
+	{
+		return;
+	}
+
+	// Hotbar sits bottom-centre, lifted 24px off the bottom edge; auto-sizes to its slots.
+	SlotContainer = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), FName(TEXT("SlotContainer")));
+	AnchorBottomCentre(Root, SlotContainer, FVector2D(0.f, -24.f), FVector2D(360.f, 72.f), /*bAutoSize*/ true);
+}
 
 void UAbilityBarWidget::NativeConstruct()
 {
@@ -50,6 +71,12 @@ void UAbilityBarWidget::SetSlotData(int32 SlotIndex, const FAbilitySlotData& Dat
 
 void UAbilityBarWidget::CreateSlotWidgets()
 {
+	// Default to the pure-C++ slot widget when no Blueprint subclass is assigned.
+	if (!SlotWidgetClass)
+	{
+		SlotWidgetClass = UAbilitySlotWidget::StaticClass();
+	}
+
 	if (!SlotContainer || !SlotWidgetClass) return;
 
 	SlotContainer->ClearChildren();

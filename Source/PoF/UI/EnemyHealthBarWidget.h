@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "UI/ARPGCodeWidgetBase.h"
 #include "GameplayEffectTypes.h"
 #include "EnemyHealthBarWidget.generated.h"
 
@@ -15,7 +15,7 @@ class UAbilitySystemComponent;
  * configurable idle period, and hides on death.
  */
 UCLASS()
-class POF_API UEnemyHealthBarWidget : public UUserWidget
+class POF_API UEnemyHealthBarWidget : public UARPGCodeWidgetBase
 {
 	GENERATED_BODY()
 
@@ -41,18 +41,21 @@ protected:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual void NativeDestruct() override;
 
-	// --- Widget bindings (match names in UMG designer) ---
+	/** Build the floating-bar tree in C++ (no companion Widget Blueprint). */
+	virtual void BuildTree() override;
 
-	UPROPERTY(meta = (BindWidget))
+	// --- Widgets (constructed in BuildTree) ---
+
+	UPROPERTY()
 	TObjectPtr<UProgressBar> HealthBar;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY()
 	TObjectPtr<UTextBlock> EnemyNameText;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY()
 	TObjectPtr<UTextBlock> LevelText;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY()
 	TObjectPtr<UTextBlock> HealthText;
 
 	// --- Tuning ---
