@@ -9,6 +9,7 @@ specs = [
     (unreal.VSArenaCollisionTest, "VSArenaCollisionTest"),
     (unreal.VSArenaBoundsTest, "VSArenaBoundsTest"),
     (unreal.VSArenaSetupTest, "VSArenaSetupTest"),
+    (unreal.VSFootstepWiringTest, "VSFootstepWiringTest"),
 ]
 classes = tuple(c for c, _ in specs)
 for a in aes.get_all_level_actors():
