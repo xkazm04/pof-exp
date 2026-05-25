@@ -1,0 +1,13 @@
+{
+  "abilities": [
+    {
+      "name": "Fireball",
+      "gameplayTag": "Ability.Fire.Fireball",
+      "abilityClass": "/Script/PoF.GA_Gen_Fireball",
+      "effectClasses": [
+        "/Script/PoF.GE_Gen_Fireball_FireImpact",
+        "/Script/PoF.GE_Gen_Fireball_Burning"
+      ]
+    }
+  ]
+}
