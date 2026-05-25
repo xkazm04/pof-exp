@@ -22,6 +22,28 @@ enum class EEnemyArchetype : uint8
 	Brute         UMETA(DisplayName = "Brute")
 };
 
+/**
+ * Canonical per-archetype combat/loot/XP tuning. Pure, world-free data — the
+ * single source of truth consumed by both AARPGEnemyCharacter::ApplyArchetypeDefaults()
+ * (applied at possession) and GetBaseXPReward(), and asserted by the bestiary
+ * config test gate. Mirrors the app-side ENEMY_ARCHETYPES design data.
+ */
+struct FEnemyArchetypeDefaults
+{
+	float AttackRange = 200.f;
+	float PreferredCombatDistance = 0.f;
+	float RetreatDistance = 0.f;
+	float AttackCooldown = 2.0f;
+	FGameplayTag PrimaryAbilityTag;
+	/** Post-charge vulnerability window (Brute). 0 = no charge. */
+	float ChargeVulnerabilityDuration = 0.f;
+	/** WalkSpeed multiplier during charge (Brute). 1 = no charge. */
+	float ChargeSpeedMultiplier = 1.f;
+	int32 LootNumRolls = 1;
+	float LootRarityBonusMultiplier = 1.f;
+	float BaseXPReward = 10.f;
+};
+
 UCLASS()
 class POF_API AARPGEnemyCharacter : public AARPGCharacterBase
 {
@@ -46,6 +68,13 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "AI|Archetype")
 	EEnemyArchetype GetArchetype() const { return Archetype; }
+
+	/**
+	 * Canonical tuning for an archetype — pure and world-free. Single source of
+	 * truth for ApplyArchetypeDefaults() (runtime) and GetBaseXPReward(); also the
+	 * surface the bestiary config test gate asserts without needing a PIE world.
+	 */
+	static FEnemyArchetypeDefaults GetArchetypeDefaults(EEnemyArchetype InArchetype);
 
 	UFUNCTION(BlueprintPure, Category = "AI|Archetype")
 	float GetAttackRange() const { return AttackRange; }

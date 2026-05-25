@@ -147,13 +147,7 @@ void AARPGEnemyCharacter::OnDeathFromAbility(AActor* KillingActor)
 
 float AARPGEnemyCharacter::GetBaseXPReward() const
 {
-	switch (Archetype)
-	{
-	case EEnemyArchetype::MeleeGrunt:   return 10.f;
-	case EEnemyArchetype::RangedCaster:  return 10.f;
-	case EEnemyArchetype::Brute:         return 25.f;
-	default:                             return 10.f;
-	}
+	return GetArchetypeDefaults(Archetype).BaseXPReward;
 }
 
 float AARPGEnemyCharacter::CalculateXPReward(int32 KillerLevel) const
@@ -213,38 +207,60 @@ void AARPGEnemyCharacter::StopBehaviorTree()
 	AIC->ClearFocus(EAIFocusPriority::Gameplay);
 }
 
-void AARPGEnemyCharacter::ApplyArchetypeDefaults()
+FEnemyArchetypeDefaults AARPGEnemyCharacter::GetArchetypeDefaults(EEnemyArchetype InArchetype)
 {
-	switch (Archetype)
+	FEnemyArchetypeDefaults D;
+	switch (InArchetype)
 	{
 	case EEnemyArchetype::MeleeGrunt:
-		AttackRange = 200.f;
-		PreferredCombatDistance = 0.f;
-		RetreatDistance = 0.f;
-		AttackCooldown = 2.0f;
-		PrimaryAbilityTag = ARPGGameplayTags::Ability_Melee_LightAttack;
-		if (LootDropComponent) { LootDropComponent->NumRolls = 1; LootDropComponent->RarityBonusMultiplier = 1.f; }
+		D.AttackRange = 200.f;
+		D.AttackCooldown = 2.0f;
+		D.PrimaryAbilityTag = ARPGGameplayTags::Ability_Melee_LightAttack;
+		D.LootNumRolls = 1;
+		D.LootRarityBonusMultiplier = 1.f;
+		D.BaseXPReward = 10.f;
 		break;
 
 	case EEnemyArchetype::RangedCaster:
-		AttackRange = 800.f;
-		PreferredCombatDistance = 800.f;
-		RetreatDistance = 400.f;
-		AttackCooldown = 3.0f;
-		PrimaryAbilityTag = ARPGGameplayTags::Ability_Ranged_Fireball;
-		if (LootDropComponent) { LootDropComponent->NumRolls = 1; LootDropComponent->RarityBonusMultiplier = 1.2f; }
+		D.AttackRange = 800.f;
+		D.PreferredCombatDistance = 800.f;
+		D.RetreatDistance = 400.f;
+		D.AttackCooldown = 3.0f;
+		D.PrimaryAbilityTag = ARPGGameplayTags::Ability_Ranged_Fireball;
+		D.LootNumRolls = 1;
+		D.LootRarityBonusMultiplier = 1.2f;
+		D.BaseXPReward = 10.f;
 		break;
 
 	case EEnemyArchetype::Brute:
-		AttackRange = 250.f;
-		PreferredCombatDistance = 0.f;
-		RetreatDistance = 0.f;
-		AttackCooldown = 4.0f;
-		PrimaryAbilityTag = ARPGGameplayTags::Ability_Melee_HeavyAttack;
-		ChargeVulnerabilityDuration = 2.0f;
-		ChargeSpeedMultiplier = 3.0f;
-		if (LootDropComponent) { LootDropComponent->NumRolls = 2; LootDropComponent->RarityBonusMultiplier = 2.f; }
+		D.AttackRange = 250.f;
+		D.AttackCooldown = 4.0f;
+		D.PrimaryAbilityTag = ARPGGameplayTags::Ability_Melee_HeavyAttack;
+		D.ChargeVulnerabilityDuration = 2.0f;
+		D.ChargeSpeedMultiplier = 3.0f;
+		D.LootNumRolls = 2;
+		D.LootRarityBonusMultiplier = 2.f;
+		D.BaseXPReward = 25.f;
 		break;
+	}
+	return D;
+}
+
+void AARPGEnemyCharacter::ApplyArchetypeDefaults()
+{
+	const FEnemyArchetypeDefaults D = GetArchetypeDefaults(Archetype);
+
+	AttackRange = D.AttackRange;
+	PreferredCombatDistance = D.PreferredCombatDistance;
+	RetreatDistance = D.RetreatDistance;
+	AttackCooldown = D.AttackCooldown;
+	PrimaryAbilityTag = D.PrimaryAbilityTag;
+	ChargeVulnerabilityDuration = D.ChargeVulnerabilityDuration;
+	ChargeSpeedMultiplier = D.ChargeSpeedMultiplier;
+	if (LootDropComponent)
+	{
+		LootDropComponent->NumRolls = D.LootNumRolls;
+		LootDropComponent->RarityBonusMultiplier = D.LootRarityBonusMultiplier;
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("[Archetype] %s set to %d (AttackRange=%.0f, Cooldown=%.1f)"),
