@@ -28,6 +28,7 @@ namespace ARPGGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Vulnerable,   "State.Vulnerable",   "Enemy is in post-charge vulnerability window");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Buffed_WarCry,"State.Buffed.WarCry","Player has active War Cry buff");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Dashing,      "State.Dashing",      "Player is mid-dash-strike");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Burning,      "State.Burning",      "On fire — taking fire damage over time (Burning status effect)");
 
 	// --- Damage ---
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Damage_Physical,  "Damage.Physical",  "Physical damage type");
