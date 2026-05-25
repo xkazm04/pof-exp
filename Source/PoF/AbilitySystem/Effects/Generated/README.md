@@ -13,10 +13,20 @@ This folder is **additive**: it never modifies hand-written `GE_*` classes.
 
 ## Files
 
+### GameplayEffects (`Effects/Generated/`)
+
 | File | Effect | Duration | Modifiers | Granted tags |
 |------|--------|----------|-----------|--------------|
 | `GE_Gen_Fireball_FireImpact.{h,cpp}` | Fire Impact | Instant | `Health += -40` (Additive) | — |
 | `GE_Gen_Fireball_Burning.{h,cpp}` | Burning | HasDuration 3.0s, period 1.0s | `Health += -5` per tick (Additive) | `State.Burning` |
+
+### Wiring ability (`Abilities/Generated/`) — ECW B3b
+
+| File | Class | Mana | Activation rules | Applies |
+|------|-------|------|------------------|---------|
+| `GA_Gen_Fireball.{h,cpp}` | `UGA_Gen_Fireball : UARPGGameplayAbility` | 20 | blocked while `State.Dead` / `State.Stunned` | both GEs above (to target) |
+
+**Bespoke step required:** `GA_Gen_Fireball::ActivateAbility` applies the damaging effects to a placeholder target (the owner's own ASC). Replace it with real target acquisition (projectile / trace / lock-on) — that cannot be generated from the spec alone. Cooldown GE is also a TODO (out of B3b scope).
 
 ## Attribute mapping
 
