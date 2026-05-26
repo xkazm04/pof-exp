@@ -263,9 +263,40 @@ void FPofHttpServer::Start(uint32 Port, const FString& InAuthToken, const FStrin
 				return true;
 			}
 
+			// Read the requested automation test name from the body.
+			TSharedPtr<FJsonObject> Body = FPofHttpRouter::ParseJsonBody(Request.Body);
+			FString Filter;
+			if (Body.IsValid())
+			{
+				Body->TryGetStringField(TEXT("filter"), Filter);
+			}
+			if (Filter.IsEmpty())
+			{
+				OnComplete(MakeErrorResponse(TEXT("Missing 'filter' (automation test name)"), 400));
+				return true;
+			}
+
+			UPofTestRunner* TestRunner = FPillarsOfFortuneBridgeEditorModule::Get().GetTestRunner();
+			if (!TestRunner)
+			{
+				OnComplete(MakeErrorResponse(TEXT("Test runner not available"), 503));
+				return true;
+			}
+
+			const FPofAutomationOutcome Outcome = TestRunner->RunAutomationTest(Filter);
+
 			TSharedRef<FJsonObject> Json = MakeShareable(new FJsonObject());
-			Json->SetStringField(TEXT("status"), TEXT("accepted"));
-			Json->SetStringField(TEXT("message"), TEXT("Automation test request received"));
+			if (!Outcome.bFound)
+			{
+				// No matching test — report not_found so the caller keeps the gate deferred (never a false fail).
+				Json->SetStringField(TEXT("status"), TEXT("not_found"));
+				Json->SetStringField(TEXT("message"), Outcome.Message);
+			}
+			else
+			{
+				Json->SetStringField(TEXT("status"), Outcome.bPassed ? TEXT("passed") : TEXT("failed"));
+				Json->SetStringField(TEXT("testId"), Outcome.MatchedName);
+			}
 
 			auto Response = MakeJsonResponse(SerializeJsonObject(Json));
 			AddCorsHeaders(*Response, CapturedOrigins);
@@ -283,9 +314,55 @@ void FPofHttpServer::Start(uint32 Port, const FString& InAuthToken, const FStrin
 				return true;
 			}
 
+			UPofSnapshotCapture* SnapshotCapture = FPillarsOfFortuneBridgeEditorModule::Get().GetSnapshotCapture();
+			if (!SnapshotCapture)
+			{
+				OnComplete(MakeErrorResponse(TEXT("Snapshot capture not available"), 503));
+				return true;
+			}
+
+			// Build a camera preset from the body (id required; camera fields optional → current default).
+			TSharedPtr<FJsonObject> Body = FPofHttpRouter::ParseJsonBody(Request.Body);
+			FPofCameraPreset Preset;
+			Preset.Id = TEXT("capture");
+			if (Body.IsValid())
+			{
+				Body->TryGetStringField(TEXT("id"), Preset.Id);
+				const TArray<TSharedPtr<FJsonValue>>* Loc = nullptr;
+				if (Body->TryGetArrayField(TEXT("location"), Loc) && Loc->Num() == 3)
+				{
+					Preset.Location = FVector((*Loc)[0]->AsNumber(), (*Loc)[1]->AsNumber(), (*Loc)[2]->AsNumber());
+				}
+				const TArray<TSharedPtr<FJsonValue>>* Rot = nullptr;
+				if (Body->TryGetArrayField(TEXT("rotation"), Rot) && Rot->Num() == 3)
+				{
+					Preset.Rotation = FRotator((*Rot)[0]->AsNumber(), (*Rot)[1]->AsNumber(), (*Rot)[2]->AsNumber());
+				}
+				double FovValue = 0.0;
+				if (Body->TryGetNumberField(TEXT("fov"), FovValue))
+				{
+					Preset.FOV = static_cast<float>(FovValue);
+				}
+			}
+
+			const int32 Before = SnapshotCapture->GetResults().Num();
+			SnapshotCapture->CapturePreset(Preset, /*bSaveAsBaseline=*/false);
+			const TArray<FPofSnapshotResult>& Results = SnapshotCapture->GetResults();
+
 			TSharedRef<FJsonObject> Json = MakeShareable(new FJsonObject());
-			Json->SetStringField(TEXT("status"), TEXT("accepted"));
-			Json->SetStringField(TEXT("message"), TEXT("Snapshot capture request received"));
+			if (Results.Num() > Before)
+			{
+				const FPofSnapshotResult& Shot = Results.Last();
+				Json->SetStringField(TEXT("status"), TEXT("captured"));
+				Json->SetStringField(TEXT("filePath"), Shot.FilePath);
+				Json->SetNumberField(TEXT("width"), Shot.Width);
+				Json->SetNumberField(TEXT("height"), Shot.Height);
+			}
+			else
+			{
+				Json->SetStringField(TEXT("status"), TEXT("failed"));
+				Json->SetStringField(TEXT("message"), TEXT("Capture produced no image (no active editor viewport?)"));
+			}
 
 			auto Response = MakeJsonResponse(SerializeJsonObject(Json));
 			AddCorsHeaders(*Response, CapturedOrigins);

@@ -103,6 +103,15 @@ struct PILLARSOFFORTUNEBRIDGE_API FPofTestResult
     UPROPERTY() TArray<FString> Errors;
 };
 
+/** Outcome of running one registered automation test by filter (plain, not reflected). */
+struct FPofAutomationOutcome
+{
+    bool bFound = false;
+    bool bPassed = false;
+    FString MatchedName;
+    FString Message;
+};
+
 UCLASS()
 class PILLARSOFFORTUNEBRIDGE_API UPofTestRunner : public UObject
 {
@@ -112,6 +121,14 @@ public:
     void ExecuteTestSpec(const FPofTestSpec& Spec);
     const FPofTestResult& GetLastResult() const { return LastResult; }
     TArray<FPofTestResult> GetAllResults() const { return StoredResults; }
+
+    /**
+     * Run the registered automation test whose name matches Filter (substring of
+     * the test's full or display name). Stores an FPofTestResult (so GET
+     * /pof/test/results returns it) and returns the outcome. If no test matches,
+     * bFound is false and nothing is stored — the caller keeps the gate deferred.
+     */
+    FPofAutomationOutcome RunAutomationTest(const FString& Filter);
 
     bool IsRunning() const { return bIsRunning; }
 

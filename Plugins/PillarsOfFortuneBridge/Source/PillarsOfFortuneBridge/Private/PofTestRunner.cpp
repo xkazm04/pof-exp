@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Misc/DateTime.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 
@@ -12,6 +13,69 @@
 #include "UnrealEdGlobals.h"
 #include "Editor/UnrealEdEngine.h"
 #endif
+
+#if WITH_DEV_AUTOMATION_TESTS || WITH_AUTOMATION_TESTS
+#include "Misc/AutomationTest.h"
+#endif
+
+FPofAutomationOutcome UPofTestRunner::RunAutomationTest(const FString& Filter)
+{
+    FPofAutomationOutcome Outcome;
+#if WITH_DEV_AUTOMATION_TESTS || WITH_AUTOMATION_TESTS
+    FAutomationTestFramework& Framework = FAutomationTestFramework::Get();
+
+    // Find a registered test whose full or display name contains the filter.
+    TArray<FAutomationTestInfo> TestInfos;
+    Framework.GetValidTestNames(TestInfos);
+    FString MatchedName;
+    for (const FAutomationTestInfo& Info : TestInfos)
+    {
+        if (Info.GetTestName().Contains(Filter) || Info.GetDisplayName().Contains(Filter))
+        {
+            MatchedName = Info.GetTestName();
+            break;
+        }
+    }
+    if (MatchedName.IsEmpty())
+    {
+        Outcome.Message = FString::Printf(TEXT("No automation test matches '%s'"), *Filter);
+        UE_LOG(LogPofBridge, Warning, TEXT("RunAutomationTest: %s"), *Outcome.Message);
+        return Outcome;
+    }
+
+    // Simple automation tests run synchronously within StartTestByName/StopTest.
+    const FDateTime StartedAt = FDateTime::UtcNow();
+    Framework.StartTestByName(MatchedName, 0);
+    FAutomationTestExecutionInfo ExecInfo;
+    const bool bPassed = Framework.StopTest(ExecInfo);
+    const FDateTime EndedAt = FDateTime::UtcNow();
+
+    Outcome.bFound = true;
+    Outcome.bPassed = bPassed;
+    Outcome.MatchedName = MatchedName;
+
+    // Store a result so GET /pof/test/results returns it (keyed by the matched name).
+    FPofTestResult Result;
+    Result.TestId = MatchedName;
+    Result.Status = bPassed ? EPofTestStatus::Passed : EPofTestStatus::Failed;
+    Result.StartTime = StartedAt.ToIso8601();
+    Result.EndTime = EndedAt.ToIso8601();
+    Result.DurationMs = static_cast<int32>((EndedAt - StartedAt).GetTotalMilliseconds());
+    for (const FAutomationExecutionEntry& Entry : ExecInfo.GetEntries())
+    {
+        if (Entry.Event.Type == EAutomationEventType::Error)
+        {
+            Result.Errors.Add(Entry.Event.Message);
+        }
+    }
+    StoredResults.Add(Result);
+    UE_LOG(LogPofBridge, Log, TEXT("RunAutomationTest '%s' -> %s (%dms)"), *MatchedName,
+        bPassed ? TEXT("passed") : TEXT("failed"), Result.DurationMs);
+#else
+    Outcome.Message = TEXT("Automation framework unavailable in this build configuration");
+#endif
+    return Outcome;
+}
 
 void UPofTestRunner::ExecuteTestSpec(const FPofTestSpec& Spec)
 {
