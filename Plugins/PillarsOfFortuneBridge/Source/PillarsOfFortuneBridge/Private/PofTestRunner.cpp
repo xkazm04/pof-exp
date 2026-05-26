@@ -24,6 +24,11 @@ FPofAutomationOutcome UPofTestRunner::RunAutomationTest(const FString& Filter)
 #if WITH_DEV_AUTOMATION_TESTS || WITH_AUTOMATION_TESTS
     FAutomationTestFramework& Framework = FAutomationTestFramework::Get();
 
+    // GetValidTestNames is gated by the RequestedTestFilter (0 in a fresh editor that
+    // never opened the Automation UI → empty list). Request all filter bits so
+    // EngineFilter/ProductFilter/etc. tests are enumerable.
+    Framework.SetRequestedTestFilter(EAutomationTestFlags_FilterMask);
+
     // Find a registered test whose full or display name contains the filter.
     TArray<FAutomationTestInfo> TestInfos;
     Framework.GetValidTestNames(TestInfos);
