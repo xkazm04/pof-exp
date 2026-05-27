@@ -8,6 +8,7 @@
 #include "PofBlueprintIntrospector.h"
 #include "PofLiveCodingBridge.h"
 #include "PofWebSocketServer.h"
+#include "PofPythonRunner.h"
 
 #define LOCTEXT_NAMESPACE "FPillarsOfFortuneBridgeEditorModule"
 
@@ -33,6 +34,9 @@ void FPillarsOfFortuneBridgeEditorModule::StartupModule()
 
     LiveCoding = NewObject<UPofLiveCodingBridge>();
     LiveCoding->AddToRoot();
+
+    PythonRunner = NewObject<UPofPythonRunner>();
+    PythonRunner->AddToRoot();
 
     // Start HTTP server
     HttpServer = MakeShared<FPofHttpServer>();
@@ -85,6 +89,12 @@ void FPillarsOfFortuneBridgeEditorModule::ShutdownModule()
     {
         LiveCoding->RemoveFromRoot();
         LiveCoding = nullptr;
+    }
+
+    if (PythonRunner)
+    {
+        PythonRunner->RemoveFromRoot();
+        PythonRunner = nullptr;
     }
 
     if (WebSocketServer)

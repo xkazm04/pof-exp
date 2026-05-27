@@ -7,6 +7,7 @@
 #include "PofSnapshotCapture.h"
 #include "PofBlueprintIntrospector.h"
 #include "PofLiveCodingBridge.h"
+#include "PofPythonRunner.h"
 #include "PofHttpRouter.h"
 #include "Misc/EngineVersion.h"
 #include "Misc/App.h"
@@ -517,6 +518,74 @@ void FPofHttpServer::Start(uint32 Port, const FString& InAuthToken, const FStrin
 
 			FString StatusJson = LiveCoding->GetFullStatusJson();
 			auto Response = MakeJsonResponse(StatusJson);
+			AddCorsHeaders(*Response, CapturedOrigins);
+			OnComplete(MoveTemp(Response));
+			return true;
+		}));
+
+	// POST /pof/python/run  — dispatch a python module.function(args) on the editor thread.
+	// Body shape: {"module": "x.y", "function": "run", "args": {...}}
+	// Response shape: the parsed __POF_BRIDGE_RESULT__ JSON from the wrapper (ok/data|error/logs).
+	HttpRouter->BindRoute(FHttpPath(TEXT("/pof/python/run")), EHttpServerRequestVerbs::VERB_POST,
+		FHttpRequestHandler::CreateLambda([CapturedAuthToken, CapturedOrigins](const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete)
+		{
+			if (!ValidateAuth(Request, CapturedAuthToken))
+			{
+				OnComplete(MakeErrorResponse(TEXT("Unauthorized"), 401));
+				return true;
+			}
+
+			TSharedPtr<FJsonObject> Body = FPofHttpRouter::ParseJsonBody(Request.Body);
+			if (!Body.IsValid())
+			{
+				OnComplete(MakeErrorResponse(TEXT("Invalid JSON body"), 400));
+				return true;
+			}
+
+			FString Module, Function;
+			if (!Body->TryGetStringField(TEXT("module"), Module) || Module.IsEmpty() ||
+				!Body->TryGetStringField(TEXT("function"), Function) || Function.IsEmpty())
+			{
+				OnComplete(MakeErrorResponse(TEXT("Missing 'module' or 'function'"), 400));
+				return true;
+			}
+
+			// Re-serialize the args sub-object so we can pass it as a JSON literal into Python.
+			FString ArgsJson = TEXT("{}");
+			const TSharedPtr<FJsonObject>* ArgsObj = nullptr;
+			if (Body->TryGetObjectField(TEXT("args"), ArgsObj) && ArgsObj && (*ArgsObj).IsValid())
+			{
+				TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ArgsJson);
+				FJsonSerializer::Serialize((*ArgsObj).ToSharedRef(), Writer);
+			}
+
+			UPofPythonRunner* Runner = FPillarsOfFortuneBridgeEditorModule::Get().GetPythonRunner();
+			if (!Runner)
+			{
+				OnComplete(MakeErrorResponse(TEXT("Python runner not available"), 503));
+				return true;
+			}
+
+			const FPofPythonOutcome Outcome = Runner->Run(Module, Function, ArgsJson);
+
+			// On transport failure (no marker / Python plugin missing), wrap as a structured ok:false.
+			FString ResponseJson;
+			if (Outcome.ResultJson.IsEmpty())
+			{
+				TSharedRef<FJsonObject> J = MakeShareable(new FJsonObject());
+				J->SetBoolField(TEXT("ok"), false);
+				J->SetStringField(TEXT("error"), Outcome.ErrorMessage.IsEmpty()
+					? TEXT("Python invocation produced no result")
+					: Outcome.ErrorMessage);
+				ResponseJson = SerializeJsonObject(J);
+			}
+			else
+			{
+				// Pass-through the wrapper's JSON verbatim.
+				ResponseJson = Outcome.ResultJson;
+			}
+
+			auto Response = MakeJsonResponse(ResponseJson);
 			AddCorsHeaders(*Response, CapturedOrigins);
 			OnComplete(MoveTemp(Response));
 			return true;

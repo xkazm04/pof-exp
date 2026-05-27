@@ -20,11 +20,12 @@ public class PillarsOfFortuneBridge : ModuleRules
 			"RenderCore"
 		});
 
-		// Editor-only dependencies for snapshot capture and test runner
+		// Editor-only dependencies for snapshot capture, test runner, and Python invocation
 		if (Target.bBuildEditor)
 		{
 			PrivateDependencyModuleNames.AddRange(new string[] {
-				"UnrealEd"
+				"UnrealEd",
+				"PythonScriptPlugin"
 			});
 		}
 	}

@@ -9,6 +9,7 @@ class FPofHttpServer;
 class UPofBlueprintIntrospector;
 class UPofLiveCodingBridge;
 class UPofWebSocketLiveState;
+class UPofPythonRunner;
 
 class FPillarsOfFortuneBridgeEditorModule : public IModuleInterface
 {
@@ -22,6 +23,7 @@ public:
     UPofBlueprintIntrospector* GetIntrospector() const { return Introspector; }
     UPofLiveCodingBridge* GetLiveCoding() const { return LiveCoding; }
     UPofWebSocketLiveState* GetWebSocketServer() const { return WebSocketServer; }
+    UPofPythonRunner* GetPythonRunner() const { return PythonRunner; }
 
     static FPillarsOfFortuneBridgeEditorModule& Get()
     {
@@ -36,4 +38,5 @@ private:
     UPofBlueprintIntrospector* Introspector = nullptr;
     UPofLiveCodingBridge* LiveCoding = nullptr;
     UPofWebSocketLiveState* WebSocketServer = nullptr;
+    UPofPythonRunner* PythonRunner = nullptr;
 };
