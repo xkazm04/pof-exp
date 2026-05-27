@@ -26,7 +26,15 @@ public class PoFEditor : ModuleRules
 			"Niagara",
 			"IKRig",
 			"IKRigDeveloper",
-			"PythonScriptPlugin"
+			"PythonScriptPlugin",
+			// AnimBP procedural authoring (UPoFAnimBPAuthoringLibrary)
+			"BlueprintGraph",
+			"AnimGraph",
+			"AnimGraphRuntime",
+			"Kismet",
+			"KismetCompiler",
+			"AnimationBlueprintEditor",
+			"AssetRegistry"
 		});
 	}
 }
