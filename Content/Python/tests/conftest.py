@@ -182,6 +182,7 @@ def _build_unreal_stub():
     fake.AnimSequence = type("AnimSequence", (), {})
     fake.AnimBlueprint = type("AnimBlueprint", (), {})
     fake.AnimNotify_DodgeWindow = type("AnimNotify_DodgeWindow", (), {})
+    fake.AnimNotifyState_DodgeIFrame = type("AnimNotifyState_DodgeIFrame", (), {})
     fake.StaticMeshActor = type("StaticMeshActor", (), {})
     fake.PlayerStart = type("PlayerStart", (), {})
     fake.RetargetSourceOrTarget = types.SimpleNamespace(SOURCE="SOURCE", TARGET="TARGET")

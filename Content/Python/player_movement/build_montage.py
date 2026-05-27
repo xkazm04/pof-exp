@@ -57,12 +57,13 @@ def run(args):
         except Exception as e:
             result["failed"].append(f"add_slot_animation_track: {e}")
 
-        # iframe notify at frame 2
+        # iframe notify state at frame 2 — duration covers the roll's vulnerable peak
         try:
-            notify_class = getattr(unreal, "AnimNotify_DodgeWindow", None)
+            notify_class = getattr(unreal, "AnimNotifyState_DodgeIFrame", None)
             if notify_class:
+                # The state notify uses a duration; 4 frames at 30fps ≈ 0.13s of iframes.
                 unreal.AnimationLibrary.add_animation_notify_event(
-                    montage, DODGE_WINDOW_TIME, 0.0, notify_class, "DodgeWindow"
+                    montage, DODGE_WINDOW_TIME, 4.0 / 30.0, notify_class, "DodgeIFrame"
                 )
         except Exception as e:
             # Non-fatal: the montage is usable without iframes, just won't have invuln.
