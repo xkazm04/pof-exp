@@ -56,14 +56,14 @@ bool FPoFAnimBPAuthoringCreateTest::RunTest(const FString& Parameters)
     const FString AssetName   = TEXT("ABP_PoFAuthCreateTest");
     PoFAnimBPAuth::CleanupTestAsset(PackagePath / AssetName + TEXT(".") + AssetName);
 
-    UAnimBlueprint* ABP = UPoFAnimBPAuthoringLibrary::CreateAnimBlueprint(Skel, PackagePath, AssetName);
+    UAnimBlueprint* ABP = UPoFAnimBPAuthoringLibrary::CreateAnimBlueprint(Skel, PackagePath, AssetName, TEXT(""));
     TestNotNull(TEXT("ABP created"), ABP);
     if (ABP)
     {
         TestEqual(TEXT("target skeleton"), ABP->TargetSkeleton.Get(), Skel);
 
         // Idempotency: re-call returns same asset
-        UAnimBlueprint* ABP2 = UPoFAnimBPAuthoringLibrary::CreateAnimBlueprint(Skel, PackagePath, AssetName);
+        UAnimBlueprint* ABP2 = UPoFAnimBPAuthoringLibrary::CreateAnimBlueprint(Skel, PackagePath, AssetName, TEXT(""));
         TestEqual(TEXT("idempotent: same asset on re-create"), ABP, ABP2);
     }
 
@@ -84,7 +84,7 @@ bool FPoFAnimBPAuthoringStateMachineTest::RunTest(const FString& Parameters)
     const FString AssetName   = TEXT("ABP_PoFAuthSMTest");
     PoFAnimBPAuth::CleanupTestAsset(PackagePath / AssetName + TEXT(".") + AssetName);
 
-    UAnimBlueprint* ABP = UPoFAnimBPAuthoringLibrary::CreateAnimBlueprint(Skel, PackagePath, AssetName);
+    UAnimBlueprint* ABP = UPoFAnimBPAuthoringLibrary::CreateAnimBlueprint(Skel, PackagePath, AssetName, TEXT(""));
     if (!TestNotNull(TEXT("ABP created"), ABP)) return false;
 
     TestTrue(TEXT("AddStateMachine ok"),
@@ -111,7 +111,7 @@ bool FPoFAnimBPAuthoringFullRoundTripTest::RunTest(const FString& Parameters)
     const FString AssetName   = TEXT("ABP_PoFAuthRoundTrip");
     PoFAnimBPAuth::CleanupTestAsset(PackagePath / AssetName + TEXT(".") + AssetName);
 
-    UAnimBlueprint* ABP = UPoFAnimBPAuthoringLibrary::CreateAnimBlueprint(Skel, PackagePath, AssetName);
+    UAnimBlueprint* ABP = UPoFAnimBPAuthoringLibrary::CreateAnimBlueprint(Skel, PackagePath, AssetName, TEXT(""));
     if (!TestNotNull(TEXT("ABP created"), ABP)) return false;
 
     // The no-state-machine locomotion graph: BlendSpacePlayer -> Slot -> Output.

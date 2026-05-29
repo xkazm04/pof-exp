@@ -49,7 +49,10 @@ def run(args):
     asset_path = f"{PACKAGE}/{ASSET_NAME}"
     pre_existed = unreal.EditorAssetLibrary.does_asset_exist(asset_path)
 
-    abp = lib.create_anim_blueprint(skeleton, PACKAGE, ASSET_NAME)
+    # Parent the ABP to UARPGAnimInstance so it inherits the C++-computed locomotion
+    # vars (Speed cm/s, Direction -180..180) — the blend space is driven by movement
+    # with zero EventGraph logic.
+    abp = lib.create_anim_blueprint(skeleton, PACKAGE, ASSET_NAME, "/Script/PoF.ARPGAnimInstance")
     if not abp:
         result["failed"].append("create_anim_blueprint returned null")
         return result

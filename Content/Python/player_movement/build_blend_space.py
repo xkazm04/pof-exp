@@ -18,19 +18,25 @@ MANNY_SKEL_CANDIDATES = [
     "/MoverExamples/Characters/Mannequins/Meshes/SK_Mannequin",
 ]
 
-# (X direction, Y speed, retargeted clip base name — without _RT)
+# Conventional locomotion blend space driven by UARPGAnimInstance:
+#   X = Direction (-180..180, movement dir relative to facing), Y = Speed (cm/s).
+# (Direction°, Speed cm/s, retargeted clip base name — without _RT)
+WALK = 200.0
+RUN = 450.0
 GRID = [
-    (-1.0, 0.0, "Standard_Idle"),
     (0.0, 0.0, "Standard_Idle"),
-    (1.0, 0.0, "Standard_Idle"),
-    (-1.0, 0.5, "Left_Strafe_Walking"),
-    (0.0, 0.5, "Walking"),
-    (1.0, 0.5, "Right_Strafe_Walking"),
-    (-1.0, 1.0, "Left_Strafe"),
-    (0.0, 1.0, "Running"),
-    (1.0, 1.0, "Right_Strafe"),
-    (0.0, -0.5, "Walking_Backwards"),
-    (0.0, -1.0, "Running_Backward"),
+    # Walk ring
+    (0.0, WALK, "Walking"),
+    (90.0, WALK, "Right_Strafe_Walking"),
+    (-90.0, WALK, "Left_Strafe_Walking"),
+    (180.0, WALK, "Walking_Backwards"),
+    (-180.0, WALK, "Walking_Backwards"),
+    # Run ring
+    (0.0, RUN, "Running"),
+    (90.0, RUN, "Right_Strafe"),
+    (-90.0, RUN, "Left_Strafe"),
+    (180.0, RUN, "Running_Backward"),
+    (-180.0, RUN, "Running_Backward"),
 ]
 
 
@@ -80,8 +86,8 @@ def run(args):
     # Configure the two blend axes (X=Direction, Y=Speed); leave Z default.
     try:
         params = list(bs.get_editor_property("blend_parameters"))
-        params[0] = _axis("Direction", -1.0, 1.0, 2)
-        params[1] = _axis("Speed", -1.0, 1.0, 4)
+        params[0] = _axis("Direction", -180.0, 180.0, 4)
+        params[1] = _axis("Speed", 0.0, RUN, 2)
         bs.set_editor_property("blend_parameters", params)
     except Exception as e:  # noqa: BLE001
         result["failed"].append(f"set blend_parameters: {e}")

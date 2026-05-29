@@ -33,9 +33,15 @@ class POFEDITOR_API UPoFAnimBPAuthoringLibrary : public UBlueprintFunctionLibrar
     GENERATED_BODY()
 
 public:
-    /** Create (or fetch existing) an AnimBlueprint. Idempotent: returns the same asset on re-call. */
+    /**
+     * Create (or fetch existing) an AnimBlueprint. Idempotent: returns the same asset on re-call.
+     * @param ParentClassPath Optional native parent AnimInstance class (e.g.
+     *        "/Script/PoF.ARPGAnimInstance") so the AnimBP inherits C++-computed
+     *        locomotion variables. Empty -> plain UAnimInstance.
+     */
     UFUNCTION(BlueprintCallable, Category = "PoF|AnimBP", meta = (ScriptMethod))
-    static UAnimBlueprint* CreateAnimBlueprint(USkeleton* Skeleton, const FString& PackagePath, const FString& AssetName);
+    static UAnimBlueprint* CreateAnimBlueprint(USkeleton* Skeleton, const FString& PackagePath,
+        const FString& AssetName, const FString& ParentClassPath);
 
     /** Add a named state machine to the AnimGraph. Idempotent on the name. */
     UFUNCTION(BlueprintCallable, Category = "PoF|AnimBP", meta = (ScriptMethod))

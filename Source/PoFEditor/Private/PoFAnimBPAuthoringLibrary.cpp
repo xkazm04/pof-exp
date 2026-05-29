@@ -112,7 +112,7 @@ namespace
 // =====================================================================
 
 UAnimBlueprint* UPoFAnimBPAuthoringLibrary::CreateAnimBlueprint(USkeleton* Skeleton,
-    const FString& PackagePath, const FString& AssetName)
+    const FString& PackagePath, const FString& AssetName, const FString& ParentClassPath)
 {
     if (!Skeleton) return nullptr;
 
@@ -122,11 +122,27 @@ UAnimBlueprint* UPoFAnimBPAuthoringLibrary::CreateAnimBlueprint(USkeleton* Skele
         return Existing;
     }
 
+    // Resolve the parent AnimInstance class. A custom parent (e.g.
+    // /Script/PoF.ARPGAnimInstance) lets the AnimBP inherit C++-computed locomotion
+    // variables (Speed, Direction, ...) so the blend space is driven by movement
+    // without any EventGraph logic.
+    UClass* ParentClass = UAnimInstance::StaticClass();
+    if (!ParentClassPath.IsEmpty())
+    {
+        if (UClass* Loaded = LoadObject<UClass>(nullptr, *ParentClassPath))
+        {
+            if (Loaded->IsChildOf(UAnimInstance::StaticClass()))
+            {
+                ParentClass = Loaded;
+            }
+        }
+    }
+
     FAssetToolsModule& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 
     UAnimBlueprintFactory* Factory = NewObject<UAnimBlueprintFactory>();
     Factory->TargetSkeleton = Skeleton;
-    Factory->ParentClass = UAnimInstance::StaticClass();
+    Factory->ParentClass = ParentClass;
 
     UObject* New = AssetTools.Get().CreateAsset(AssetName, PackagePath, UAnimBlueprint::StaticClass(), Factory);
     return Cast<UAnimBlueprint>(New);
@@ -299,9 +315,15 @@ bool UPoFAnimBPAuthoringLibrary::AddBlendSpacePlayerToOutput(UAnimBlueprint* Ani
     UAnimGraphNode_Root* Root = FindResultRoot(AnimGraph);
     if (!Root) return false;
 
-    // Ensure the two driver float variables exist on the AnimBP.
+    // Ensure the two driver float variables exist on the AnimBP — UNLESS the parent
+    // class already provides them (e.g. UARPGAnimInstance::Speed/Direction). Creating a
+    // member var that shadows an inherited property breaks the getter resolution.
     auto EnsureFloatVar = [AnimBP](const FString& VarName)
     {
+        if (AnimBP->ParentClass && FindFProperty<FProperty>(AnimBP->ParentClass, FName(*VarName)))
+        {
+            return; // inherited from the parent AnimInstance — the getter resolves to it
+        }
         FEdGraphPinType FloatPin;
         FloatPin.PinCategory = UEdGraphSchema_K2::PC_Real;
         FloatPin.PinSubCategory = UEdGraphSchema_K2::PC_Float;
