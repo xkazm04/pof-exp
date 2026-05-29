@@ -16,7 +16,8 @@ public class PoFEditor : ModuleRules
 			"GameplayAbilities",
 			"GameplayTags",
 			"GameplayTasks",
-			"EnhancedInput"
+			"EnhancedInput",
+			"InputCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]

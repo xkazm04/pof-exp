@@ -9,6 +9,8 @@
 class UAnimBlueprint;
 class USkeleton;
 class UBlendSpace;
+class UInputMappingContext;
+class UInputAction;
 
 /**
  * Procedural AnimBP authoring — exposes graph-mutation primitives to Python.
@@ -77,4 +79,13 @@ public:
     /** Compile + save the AnimBP. Returns false if compilation failed (check ABP->Status). */
     UFUNCTION(BlueprintCallable, Category = "PoF|AnimBP", meta = (ScriptMethod))
     static bool CompileAndSave(UAnimBlueprint* AnimBP);
+
+    /**
+     * Author canonical third-person WASD modifiers on a Vector2D MoveAction in an IMC,
+     * IN C++ (NewObject(IMC) + direct Modifiers.Add via MapKey) so the instanced modifier
+     * subobjects actually apply at runtime — Python set_editor_property leaves them inert.
+     * W=Swizzle(YXZ), S=Swizzle+Negate, A=Negate, D=none. Caller saves the IMC.
+     */
+    UFUNCTION(BlueprintCallable, Category = "PoF|Input", meta = (ScriptMethod))
+    static bool SetupWASDMoveModifiers(UInputMappingContext* IMC, UInputAction* MoveAction);
 };

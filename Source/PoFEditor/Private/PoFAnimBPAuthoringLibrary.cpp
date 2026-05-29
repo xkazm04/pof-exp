@@ -19,6 +19,10 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
+#include "InputAction.h"
+#include "InputCoreTypes.h"
+#include "InputMappingContext.h"
+#include "InputModifiers.h"
 
 // AnimGraph node types
 #include "AnimGraphNode_BlendSpaceEvaluator.h"
@@ -471,4 +475,47 @@ bool UPoFAnimBPAuthoringLibrary::CompileAndSave(UAnimBlueprint* AnimBP)
     Args.TopLevelFlags = RF_Standalone | RF_Public;
     Args.SaveFlags = SAVE_NoError;
     return UPackage::SavePackage(Pkg, AnimBP, *PkgFile, Args);
+}
+
+// =====================================================================
+// SetupWASDMoveModifiers  (C++ instancing — Python set leaves modifiers inert)
+// =====================================================================
+
+bool UPoFAnimBPAuthoringLibrary::SetupWASDMoveModifiers(UInputMappingContext* IMC, UInputAction* MoveAction)
+{
+    if (!IMC || !MoveAction) return false;
+
+    IMC->UnmapAllKeysFromAction(MoveAction);
+
+    auto MakeSwizzle = [IMC]() -> UInputModifierSwizzleAxis*
+    {
+        UInputModifierSwizzleAxis* S = NewObject<UInputModifierSwizzleAxis>(IMC);
+        S->Order = EInputAxisSwizzle::YXZ; // X<->Y: digital key's scalar (X) -> forward (Y)
+        return S;
+    };
+    auto MakeNegate = [IMC]() -> UInputModifierNegate* { return NewObject<UInputModifierNegate>(IMC); };
+
+    // W forward (+Y): swizzle the scalar onto Y.
+    {
+        FEnhancedActionKeyMapping& M = IMC->MapKey(MoveAction, EKeys::W);
+        M.Modifiers.Add(MakeSwizzle());
+    }
+    // S backward (-Y): swizzle then negate.
+    {
+        FEnhancedActionKeyMapping& M = IMC->MapKey(MoveAction, EKeys::S);
+        M.Modifiers.Add(MakeSwizzle());
+        M.Modifiers.Add(MakeNegate());
+    }
+    // A left (-X): negate.
+    {
+        FEnhancedActionKeyMapping& M = IMC->MapKey(MoveAction, EKeys::A);
+        M.Modifiers.Add(MakeNegate());
+    }
+    // D right (+X): raw.
+    {
+        IMC->MapKey(MoveAction, EKeys::D);
+    }
+
+    IMC->MarkPackageDirty();
+    return true;
 }
