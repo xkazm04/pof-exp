@@ -45,7 +45,7 @@ namespace PoFAnimBPAuth
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPoFAnimBPAuthoringCreateTest,
     "PoFEditor.AnimBPAuthoring.Create",
-    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter | EAutomationTestFlags::ProductFilter)
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FPoFAnimBPAuthoringCreateTest::RunTest(const FString& Parameters)
 {
@@ -73,7 +73,7 @@ bool FPoFAnimBPAuthoringCreateTest::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPoFAnimBPAuthoringStateMachineTest,
     "PoFEditor.AnimBPAuthoring.StateMachine",
-    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter | EAutomationTestFlags::ProductFilter)
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FPoFAnimBPAuthoringStateMachineTest::RunTest(const FString& Parameters)
 {
@@ -98,7 +98,7 @@ bool FPoFAnimBPAuthoringStateMachineTest::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPoFAnimBPAuthoringFullRoundTripTest,
     "PoFEditor.AnimBPAuthoring.FullRoundTrip",
-    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter | EAutomationTestFlags::ProductFilter)
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FPoFAnimBPAuthoringFullRoundTripTest::RunTest(const FString& Parameters)
 {

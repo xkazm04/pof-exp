@@ -34,7 +34,9 @@ public class PoFEditor : ModuleRules
 			"Kismet",
 			"KismetCompiler",
 			"AnimationBlueprintEditor",
-			"AssetRegistry"
+			"AssetRegistry",
+			// EditorAssetLibrary used by the AnimBP authoring automation test for cleanup
+			"EditorScriptingUtilities"
 		});
 	}
 }

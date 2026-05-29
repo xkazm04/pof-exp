@@ -7,9 +7,24 @@
 #include "Animation/BlendSpace.h"
 #include "Engine/Blueprint.h"
 #include "Engine/SkeletalMesh.h"
-#include "EditorAssetLibrary.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Misc/PackageName.h"
 #include "UObject/Package.h"
+
+// Runtime-safe asset existence check (the PoF module is a runtime module and must
+// not depend on the editor-only EditorScriptingUtilities / EditorAssetLibrary —
+// see sibling tests, e.g. PoFHealthCheckTest, which use FPackageName::DoesPackageExist).
+namespace
+{
+    bool AssetExists(const TCHAR* ObjectPath)
+    {
+        // Strip any ".Object" suffix to a package path for DoesPackageExist.
+        FString Package(ObjectPath);
+        int32 Dot;
+        if (Package.FindChar(TEXT('.'), Dot)) { Package = Package.Left(Dot); }
+        return FPackageName::DoesPackageExist(Package);
+    }
+}
 
 /**
  * Player Movement gate — Catalog Pipeline player-movement row, step 10.
@@ -49,22 +64,22 @@ namespace PoFPlayerMovement
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FVSPlayerMovementWiringTest,
     "Project.Functional Tests.PoF.PlayerMovement.Wiring",
-    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter | EAutomationTestFlags::ProductFilter)
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FVSPlayerMovementWiringTest::RunTest(const FString& /*Parameters*/)
 {
     using namespace PoFPlayerMovement;
 
     // ── Every asset the pipeline should have built must exist. ────────────────
-    TestTrue(TEXT("ABP_VSPlayer exists"),       UEditorAssetLibrary::DoesAssetExist(ABP_VSPlayer_Path));
-    TestTrue(TEXT("BS_Locomotion exists"),      UEditorAssetLibrary::DoesAssetExist(BS_Locomotion_Path));
-    TestTrue(TEXT("AM_Roll exists"),            UEditorAssetLibrary::DoesAssetExist(AM_Roll_Path));
-    TestTrue(TEXT("IK_Mixamo exists"),          UEditorAssetLibrary::DoesAssetExist(IK_Mixamo_Path));
-    TestTrue(TEXT("IK_Manny exists"),           UEditorAssetLibrary::DoesAssetExist(IK_Manny_Path));
-    TestTrue(TEXT("RTG_MixamoToManny exists"),  UEditorAssetLibrary::DoesAssetExist(RTG_Path));
-    TestTrue(TEXT("BP_VSPlayer exists"),        UEditorAssetLibrary::DoesAssetExist(BP_VSPlayer_Path));
+    TestTrue(TEXT("ABP_VSPlayer exists"),       AssetExists(ABP_VSPlayer_Path));
+    TestTrue(TEXT("BS_Locomotion exists"),      AssetExists(BS_Locomotion_Path));
+    TestTrue(TEXT("AM_Roll exists"),            AssetExists(AM_Roll_Path));
+    TestTrue(TEXT("IK_Mixamo exists"),          AssetExists(IK_Mixamo_Path));
+    TestTrue(TEXT("IK_Manny exists"),           AssetExists(IK_Manny_Path));
+    TestTrue(TEXT("RTG_MixamoToManny exists"),  AssetExists(RTG_Path));
+    TestTrue(TEXT("BP_VSPlayer exists"),        AssetExists(BP_VSPlayer_Path));
     TestTrue(TEXT("TestLevel_PlayerMovement exists"),
-        UEditorAssetLibrary::DoesAssetExist(TestLevel_Path));
+        AssetExists(TestLevel_Path));
 
     // ── BlendSpace sample count = 11 (8-way grid + Idle×3 + 2 back samples). ──
     UBlendSpace* BS = LoadObject<UBlendSpace>(nullptr, BS_Locomotion_Path);
@@ -126,19 +141,19 @@ bool FVSPlayerMovementWiringTest::RunTest(const FString& /*Parameters*/)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FVSPlayerMovementPlayableTest,
     "Project.Functional Tests.PoF.PlayerMovement.Playable",
-    EAutomationTestFlags::EditorContext | EAutomationTestFlags::HighPriority | EAutomationTestFlags::ProductFilter)
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FVSPlayerMovementPlayableTest::RunTest(const FString& /*Parameters*/)
 {
     using namespace PoFPlayerMovement;
 
     // Bail clearly if the wiring isn't in place — Playable depends on it.
-    if (!UEditorAssetLibrary::DoesAssetExist(ABP_VSPlayer_Path))
+    if (!AssetExists(ABP_VSPlayer_Path))
     {
         AddWarning(TEXT("Playable test skipped: ABP_VSPlayer not built. Run pipeline steps 1-9 first."));
         return true;
     }
-    if (!UEditorAssetLibrary::DoesAssetExist(TestLevel_Path))
+    if (!AssetExists(TestLevel_Path))
     {
         AddWarning(TEXT("Playable test skipped: TestLevel_PlayerMovement.umap not built. Run step 10's level builder first."));
         return true;

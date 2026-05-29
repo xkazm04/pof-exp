@@ -36,7 +36,7 @@ struct FPofPythonOutcome
  * and stderr around the call and surfaces a traceback on exception.
  */
 UCLASS()
-class POFBRIDGE_API UPofPythonRunner : public UObject
+class PILLARSOFFORTUNEBRIDGE_API UPofPythonRunner : public UObject
 {
     GENERATED_BODY()
 

@@ -192,18 +192,20 @@ bool UPoFAnimBPAuthoringLibrary::AddBlendSpaceState(UAnimBlueprint* AnimBP,
     EnsureFloatVar(SpeedVarName);
     EnsureFloatVar(DirectionVarName);
 
-    // Create the state node
+    // Create the state node. UAnimStateNode has no settable StateName member —
+    // the state's name is its BoundGraph's name, so we rename the bound graph
+    // (created during PostPlacedNewNode) to set it. GetStateName() then matches.
     UAnimStateNode* State = NewObject<UAnimStateNode>(SMGraph);
     State->CreateNewGuid();
     State->NodePosX = 100;
     State->NodePosY = 100;
-    State->StateName = StateName;
     SMGraph->AddNode(State, false, false);
     State->PostPlacedNewNode();
     State->AllocateDefaultPins();
 
     if (!State->BoundGraph) return false;
     UEdGraph* StateGraph = State->BoundGraph;
+    FBlueprintEditorUtils::RenameGraph(StateGraph, *StateName);
 
     // Spawn the BlendSpace evaluator
     UAnimGraphNode_BlendSpaceEvaluator* BSEval = SpawnAnimGraphNode<UAnimGraphNode_BlendSpaceEvaluator>(StateGraph, 0, 0);
