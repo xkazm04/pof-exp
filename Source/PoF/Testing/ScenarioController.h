@@ -67,6 +67,7 @@ private:
     FString PlayAnim;  // optional: force single-node play of this anim asset at Begin (manipulation/diagnostic)
     TArray<FScnInput> Inputs;
     TArray<float> SampleTimes;
+    TArray<bool> WasActive;  // per-input edge tracking for proper held-key semantics
     TArray<TSharedPtr<FJsonValue>> SamplesJson;
 
     bool LoadScenario(const FString& Path);

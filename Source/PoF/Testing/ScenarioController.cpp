@@ -127,6 +127,7 @@ void UScenarioController::Begin()
 {
     bStarted = true;
     ScnTime = 0.f;
+    WasActive.Init(false, Inputs.Num());
     if (!PlayAnim.IsEmpty())
     {
         if (USkeletalMeshComponent* Mesh = GetMesh())
@@ -150,21 +151,34 @@ void UScenarioController::ApplyInputs()
     UEnhancedInputLocalPlayerSubsystem* EI =
         PC->GetLocalPlayer() ? ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()) : nullptr;
 
-    for (const FScnInput& In : Inputs)
+    for (int32 i = 0; i < Inputs.Num(); ++i)
     {
-        if (ScnTime < In.Start || ScnTime >= In.Start + In.Duration) continue;
+        const FScnInput& In = Inputs[i];
+        const bool bNow = (ScnTime >= In.Start && ScnTime < In.Start + In.Duration);
+        const bool bWas = WasActive.IsValidIndex(i) && WasActive[i];
         if (!In.Key.IsEmpty())
         {
+            // Held-key semantics: Pressed on rising edge, Released on falling edge. The key
+            // stays DOWN between edges (PlayerInput tracks it), so movement sustains —
+            // repeated per-frame Pressed events were read as taps and the player braked.
             const FKey K(FName(*In.Key));
-            PC->InputKey(FInputKeyEventArgs::CreateSimulated(K, IE_Pressed, 1.0f));
+            if (bNow && !bWas)
+            {
+                PC->InputKey(FInputKeyEventArgs::CreateSimulated(K, IE_Pressed, 1.0f));
+            }
+            else if (!bNow && bWas)
+            {
+                PC->InputKey(FInputKeyEventArgs::CreateSimulated(K, IE_Released, 0.0f));
+            }
         }
-        else if (EI && !In.ActionPath.IsEmpty())
+        else if (EI && bNow && !In.ActionPath.IsEmpty())
         {
             if (UInputAction* IA = LoadObject<UInputAction>(nullptr, *In.ActionPath))
             {
                 EI->InjectInputForAction(IA, FInputActionValue(In.Value), {}, {});
             }
         }
+        if (WasActive.IsValidIndex(i)) WasActive[i] = bNow;
     }
 }
 
