@@ -369,17 +369,30 @@ bool UPoFAnimBPAuthoringLibrary::AddBlendSpacePlayerToOutput(UAnimBlueprint* Ani
         Slot->Node.SlotName = FName(*SlotName);
     }
 
-    // Wire BlendSpacePlayer.Pose -> Slot.Source -> Root.Result.
-    UEdGraphPin* BspPose = FindPin(BSP, TEXT("Pose"));
-    UEdGraphPin* SlotIn  = FindPin(Slot, TEXT("Source"));
-    UEdGraphPin* SlotOut = FindPin(Slot, TEXT("Pose"));
-    if (!SlotOut) SlotOut = FindPin(Slot, TEXT("Result"));
-    UEdGraphPin* RootIn  = FindPin(Root, TEXT("Result"));
-    if (!RootIn) RootIn = FindPin(Root, TEXT("Pose"));
-    if (SlotIn) SlotIn->BreakAllPinLinks();
-    if (RootIn) RootIn->BreakAllPinLinks();
-    if (BspPose && SlotIn) Sch->TryCreateConnection(BspPose, SlotIn);
-    if (SlotOut && RootIn) Sch->TryCreateConnection(SlotOut, RootIn);
+    // Wire BlendSpacePlayer.Pose -> Slot.Source -> Root, using ROBUST pose-pin lookup:
+    // anim-node pose pins are struct-typed (the X/Y data pins are float), and the pose
+    // OUTPUT is the node's GetOutputPin(). FindPin-by-name silently failed before,
+    // leaving Root unconnected -> ref pose -> the T-pose. MakeLinkTo is the direct,
+    // non-rejecting link for pose pins.
+    auto PosePin = [](UEdGraphNode* N, EEdGraphPinDirection Dir) -> UEdGraphPin*
+    {
+        for (UEdGraphPin* P : N->Pins)
+        {
+            if (P->Direction == Dir && P->PinType.PinCategory == UEdGraphSchema_K2::PC_Struct)
+            {
+                return P;
+            }
+        }
+        return nullptr;
+    };
+    UEdGraphPin* BspOut  = PosePin(BSP, EGPD_Output);
+    UEdGraphPin* SlotIn  = PosePin(Slot, EGPD_Input);
+    UEdGraphPin* SlotOut = PosePin(Slot, EGPD_Output);
+    UEdGraphPin* RootIn  = PosePin(Root, EGPD_Input);
+    if (SlotIn)  SlotIn->BreakAllPinLinks();
+    if (RootIn)  RootIn->BreakAllPinLinks();
+    if (BspOut && SlotIn)  BspOut->MakeLinkTo(SlotIn);
+    if (SlotOut && RootIn) SlotOut->MakeLinkTo(RootIn);
 
     FBlueprintEditorUtils::MarkBlueprintAsModified(AnimBP);
     return true;
