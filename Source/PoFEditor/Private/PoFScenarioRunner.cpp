@@ -9,8 +9,12 @@
 #include "EnhancedInputSubsystems.h"
 #include "FileHelpers.h"
 #include "GameFramework/PlayerController.h"
+#include "HighResScreenshot.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
+#include "RenderingThread.h"
+#include "UnrealClient.h"
+#include "Engine/GameViewportClient.h"
 
 static UWorld* FindPieWorld()
 {
@@ -25,7 +29,8 @@ static UWorld* FindPieWorld()
     return nullptr;
 }
 
-bool UPoFScenarioRunner::RunScenario(const FString& MapPath, const TArray<FPoFTimedInput>& Inputs, float TotalSeconds)
+bool UPoFScenarioRunner::RunScenario(const FString& MapPath, const TArray<FPoFTimedInput>& Inputs,
+    float TotalSeconds, const FString& ScreenshotPath)
 {
     if (!GEditor)
     {
@@ -85,7 +90,26 @@ bool UPoFScenarioRunner::RunScenario(const FString& MapPath, const TArray<FPoFTi
         World->Tick(LEVELTICK_All, 1.f / 60.f);
     }
 
-    // PIE is intentionally left running so EvaluatePose(mode=pie) + CaptureFrame can observe it.
+    // Capture a screenshot of the live PIE game view — the deterministic T4 moment
+    // (character posed, PIE active). Requested on the viewport, then we tick + flush
+    // so the rendering thread writes the PNG before we return.
+    if (!ScreenshotPath.IsEmpty())
+    {
+        if (UGameViewportClient* VP = World->GetGameViewport())
+        {
+            GScreenshotResolutionX = 512;
+            GScreenshotResolutionY = 512;
+            FScreenshotRequest::RequestScreenshot(ScreenshotPath, /*bShowUI*/ false, /*bAddFilenameSuffix*/ false);
+            VP->Viewport->TakeHighResScreenShot();
+            for (int32 i = 0; i < 12; ++i)
+            {
+                World->Tick(LEVELTICK_All, 1.f / 60.f);
+                FlushRenderingCommands();
+            }
+        }
+    }
+
+    // PIE is intentionally left running so EvaluatePose(mode=pie) can observe it too.
     return true;
 }
 

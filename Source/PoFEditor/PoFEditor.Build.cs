@@ -36,7 +36,9 @@ public class PoFEditor : ModuleRules
 			"AnimationBlueprintEditor",
 			"AssetRegistry",
 			// EditorAssetLibrary used by the AnimBP authoring automation test for cleanup
-			"EditorScriptingUtilities"
+			"EditorScriptingUtilities",
+			// FlushRenderingCommands + screenshot capture in PoFScenarioRunner
+			"RenderCore"
 		});
 	}
 }

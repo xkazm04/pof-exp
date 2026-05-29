@@ -22,7 +22,7 @@ class _Struct:
 fake.PoFTimedInput = _Struct
 fake.Vector2D = lambda x, y: (x, y)
 fake.PoFScenarioRunner = type(
-    "R", (), {"run_scenario": staticmethod(lambda m, inp, t: calls.update({"map": m, "n": len(inp), "t": t}) or True)}
+    "R", (), {"run_scenario": staticmethod(lambda m, inp, t, shot: calls.update({"map": m, "n": len(inp), "t": t, "shot": shot}) or True)}
 )
 sys.modules["unreal"] = fake
 

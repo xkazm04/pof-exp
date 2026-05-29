@@ -18,6 +18,10 @@ def run(args):
         ti.set_editor_property("start_seconds", float(spec.get("start", 0.0)))
         ti.set_editor_property("duration_seconds", float(spec.get("duration", 1.0)))
         timed.append(ti)
+    screenshot = args.get("screenshot_path", "")
     started = unreal.PoFScenarioRunner.run_scenario(
-        args["map"], timed, float(args.get("total_seconds", 1.5)))
-    return make_observation("metric", {"started": bool(started)}, scenario_id=args.get("scenario_id"))
+        args["map"], timed, float(args.get("total_seconds", 1.5)), screenshot)
+    data = {"started": bool(started)}
+    if screenshot:
+        data["png"] = screenshot
+    return make_observation("metric", data, scenario_id=args.get("scenario_id"))

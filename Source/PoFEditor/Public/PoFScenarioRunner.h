@@ -37,9 +37,13 @@ class POFEDITOR_API UPoFScenarioRunner : public UBlueprintFunctionLibrary
     GENERATED_BODY()
 
 public:
-    /** Returns true if PIE started and a pawn was possessed. PIE is left running. */
+    /** Returns true if PIE started and a pawn was possessed. PIE is left running.
+     *  If ScreenshotPath is non-empty, a high-res screenshot of the live PIE game
+     *  view is captured near the end of the tick loop (the deterministic, correct
+     *  T4 moment — the character is posed and PIE is active). */
     UFUNCTION(BlueprintCallable, Category = "PoF|Scenario", meta = (ScriptMethod))
-    static bool RunScenario(const FString& MapPath, const TArray<FPoFTimedInput>& Inputs, float TotalSeconds);
+    static bool RunScenario(const FString& MapPath, const TArray<FPoFTimedInput>& Inputs,
+        float TotalSeconds, const FString& ScreenshotPath);
 
     /** Stop the active PIE session. */
     UFUNCTION(BlueprintCallable, Category = "PoF|Scenario", meta = (ScriptMethod))
