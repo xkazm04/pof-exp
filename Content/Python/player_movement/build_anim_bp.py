@@ -9,7 +9,9 @@ import unreal
 PACKAGE = "/Game/Characters/Player"
 ASSET_NAME = "ABP_VSPlayer"
 BP_VSPLAYER_PATH = "/Game/VerticalSlice/BP_VSPlayer"
-BS_PATH = "/Game/Characters/Player/Animations/BS_Locomotion"
+# Default to the PROVEN native-Manny strafe blend space (good samples, no Mixamo retarget).
+# Override with args["bs_path"]. The old Mixamo-retargeted BS_Locomotion is suspect.
+DEFAULT_BS_PATH = "/MoverExamples/Characters/Mannequins/Animations/Manny/BS_MM_WalkRunStrafe"
 
 SKEL_CANDIDATES = [
     "/MoverTests/Characters/Mannequins/Meshes/SK_Mannequin",
@@ -34,10 +36,12 @@ def run(args):
         result["failed"].append("UE5 Manny skeleton not found in any candidate path")
         return result
 
-    bs = unreal.EditorAssetLibrary.load_asset(BS_PATH)
+    bs_path = args.get("bs_path", DEFAULT_BS_PATH)
+    bs = unreal.EditorAssetLibrary.load_asset(bs_path)
     if not bs:
-        result["failed"].append(f"BS_Locomotion not found at {BS_PATH}; run step 06 first")
+        result["failed"].append(f"blend space not found at {bs_path}")
         return result
+    result["bs_used"] = bs_path
 
     lib = getattr(unreal, "PoFAnimBPAuthoringLibrary", None)
     if lib is None:

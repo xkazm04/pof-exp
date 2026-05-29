@@ -1,5 +1,7 @@
 #include "ScenarioController.h"
 
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimationAsset.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Dom/JsonObject.h"
@@ -24,6 +26,7 @@
 #include "RenderingThread.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "UObject/UnrealType.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPoFScenario, Log, All);
 
@@ -72,6 +75,7 @@ bool UScenarioController::LoadScenario(const FString& Path)
     if (Root->TryGetNumberField(TEXT("num_samples"), I)) NumSamples = FMath::Clamp(I, 1, 60);
     if (Root->TryGetNumberField(TEXT("settle"), D)) SettleTime = (float)D;
     Root->TryGetStringField(TEXT("out_dir"), OutDir);
+    Root->TryGetStringField(TEXT("play_anim"), PlayAnim);
 
     const TArray<TSharedPtr<FJsonValue>>* InArr = nullptr;
     if (Root->TryGetArrayField(TEXT("inputs"), InArr))
@@ -123,6 +127,18 @@ void UScenarioController::Begin()
 {
     bStarted = true;
     ScnTime = 0.f;
+    if (!PlayAnim.IsEmpty())
+    {
+        if (USkeletalMeshComponent* Mesh = GetMesh())
+        {
+            if (UAnimationAsset* Anim = LoadObject<UAnimationAsset>(nullptr, *PlayAnim))
+            {
+                Mesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+                Mesh->PlayAnimation(Anim, true);
+                UE_LOG(LogPoFScenario, Display, TEXT("[scenario] force-play anim %s"), *PlayAnim);
+            }
+        }
+    }
     UE_LOG(LogPoFScenario, Display, TEXT("[scenario] BEGIN (pawn possessed, settled)"));
 }
 
@@ -186,6 +202,23 @@ void UScenarioController::DoSample(int32 Idx)
         S->SetNumberField(TEXT("droopL"), DL);
         S->SetNumberField(TEXT("droopR"), DR);
         bPoseValid = bL && bR;
+
+        // Read the anim driver values the AnimBP actually sees (describe WHY it animates
+        // or not): reflection over the live anim instance's Speed/Direction floats.
+        if (UAnimInstance* AI = Mesh->GetAnimInstance())
+        {
+            S->SetStringField(TEXT("anim_class"), AI->GetClass()->GetName());
+            auto ReadF = [AI](const TCHAR* N) -> double
+            {
+                if (FFloatProperty* P = FindFProperty<FFloatProperty>(AI->GetClass(), N))
+                    return P->GetPropertyValue_InContainer(AI);
+                if (FDoubleProperty* DP = FindFProperty<FDoubleProperty>(AI->GetClass(), N))
+                    return DP->GetPropertyValue_InContainer(AI);
+                return -999.0;
+            };
+            S->SetNumberField(TEXT("anim_speed"), ReadF(TEXT("Speed")));
+            S->SetNumberField(TEXT("anim_direction"), ReadF(TEXT("Direction")));
+        }
     }
     S->SetBoolField(TEXT("pose_valid"), bPoseValid);
     S->SetStringField(TEXT("frame"), CaptureFrame(Idx));

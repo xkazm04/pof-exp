@@ -337,6 +337,17 @@ bool UPoFAnimBPAuthoringLibrary::AddBlendSpacePlayerToOutput(UAnimBlueprint* Ani
     UAnimGraphNode_BlendSpacePlayer* BSP = SpawnAnimGraphNode<UAnimGraphNode_BlendSpacePlayer>(AnimGraph, -400, 0);
     BSP->Node.SetBlendSpace(BlendSpace);
     BSP->ReconstructNode();
+    // CRITICAL: the X/Y (position) inputs default to INTERNAL (not pins), so the
+    // Speed/Direction getters had nothing to connect to and the blend space sampled
+    // forever at (0,0) -> reference pose. Expose X/Y as pins, then rebuild the node.
+    for (FOptionalPinFromProperty& OP : BSP->ShowPinForProperties)
+    {
+        if (OP.PropertyName == TEXT("X") || OP.PropertyName == TEXT("Y"))
+        {
+            OP.bShowPin = true;
+        }
+    }
+    BSP->ReconstructNode();
 
     auto SpawnGetter = [AnimGraph](FName VarName) -> UK2Node_VariableGet*
     {

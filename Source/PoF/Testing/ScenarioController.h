@@ -64,6 +64,7 @@ private:
     int32 NextSample = 0;
 
     FString OutDir;
+    FString PlayAnim;  // optional: force single-node play of this anim asset at Begin (manipulation/diagnostic)
     TArray<FScnInput> Inputs;
     TArray<float> SampleTimes;
     TArray<TSharedPtr<FJsonValue>> SamplesJson;
