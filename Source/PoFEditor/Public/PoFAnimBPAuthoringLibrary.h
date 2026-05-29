@@ -54,6 +54,16 @@ public:
     UFUNCTION(BlueprintCallable, Category = "PoF|AnimBP", meta = (ScriptMethod))
     static bool AddDefaultSlot(UAnimBlueprint* AnimBP, const FString& SlotName);
 
+    /**
+     * Author a complete locomotion AnimGraph WITHOUT a state machine:
+     * BlendSpacePlayer(BlendSpace, driven by the two named vars) -> Slot -> OutputPose.
+     * This is the robust path for simple locomotion — no entry-state concept, always
+     * compiles clean. Creates the driver vars + the slot if missing.
+     */
+    UFUNCTION(BlueprintCallable, Category = "PoF|AnimBP", meta = (ScriptMethod))
+    static bool AddBlendSpacePlayerToOutput(UAnimBlueprint* AnimBP, UBlendSpace* BlendSpace,
+        const FString& SpeedVarName, const FString& DirectionVarName, const FString& SlotName);
+
     /** Rewire the AnimGraph so StateMachine -> Slot -> OutputPose. Idempotent (rewires cleanly). */
     UFUNCTION(BlueprintCallable, Category = "PoF|AnimBP", meta = (ScriptMethod))
     static bool ConnectStateMachineToOutputPose(UAnimBlueprint* AnimBP, const FString& StateMachineName, const FString& SlotName);

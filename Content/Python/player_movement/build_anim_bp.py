@@ -12,8 +12,9 @@ BP_VSPLAYER_PATH = "/Game/VerticalSlice/BP_VSPlayer"
 BS_PATH = "/Game/Characters/Player/Animations/BS_Locomotion"
 
 SKEL_CANDIDATES = [
+    "/MoverTests/Characters/Mannequins/Meshes/SK_Mannequin",
+    "/MoverExamples/Characters/Mannequins/Meshes/SK_Mannequin",
     "/Game/Characters/Mannequins/Meshes/SK_Mannequin_Skeleton",
-    "/Game/Characters/Manny/Meshes/SK_Mannequin_Skeleton",
 ]
 
 
@@ -53,37 +54,33 @@ def run(args):
         result["failed"].append("create_anim_blueprint returned null")
         return result
 
-    if not lib.add_state_machine(abp, "Locomotion"):
-        result["failed"].append("add_state_machine(Locomotion) failed")
-        return result
-
-    if not lib.add_blend_space_state(abp, "Locomotion", "Strafe", bs, "Speed", "Direction"):
-        result["failed"].append("add_blend_space_state failed")
-        return result
-
-    if not lib.add_default_slot(abp, "DefaultSlot"):
-        result["failed"].append("add_default_slot failed")
-        return result
-
-    if not lib.connect_state_machine_to_output_pose(abp, "Locomotion", "DefaultSlot"):
-        result["failed"].append("connect_state_machine_to_output_pose failed")
+    # Locomotion graph: BlendSpacePlayer -> Slot -> Output (no state machine — the
+    # state-machine path leaves an unconnected entry state that compiles with warnings).
+    if not lib.add_blend_space_player_to_output(abp, bs, "Speed", "Direction", "DefaultSlot"):
+        result["failed"].append("add_blend_space_player_to_output failed")
         return result
 
     if not lib.compile_and_save(abp):
         result["failed"].append("compile_and_save failed (check compile log)")
         return result
 
-    # Wire ABP into BP_VSPlayer.Mesh.AnimClass
+    # Wire ABP into BP_VSPlayer.Mesh.AnimClass so the player actually uses it.
+    # NOTE: in UE Python, Blueprint.generated_class is a METHOD — call it.
     try:
         bp_player = unreal.EditorAssetLibrary.load_asset(BP_VSPLAYER_PATH)
         if bp_player:
-            cdo = unreal.get_default_object(bp_player.generated_class)
+            gen_class = bp_player.generated_class()
+            cdo = unreal.get_default_object(gen_class) if gen_class else None
             mesh = cdo.get_editor_property("mesh") if cdo else None
-            if mesh:
-                mesh.set_editor_property("anim_class", abp.generated_class)
+            abp_class = abp.generated_class()
+            if mesh and abp_class:
+                mesh.set_editor_property("animation_mode", unreal.AnimationMode.ANIMATION_BLUEPRINT)
+                mesh.set_editor_property("anim_class", abp_class)
                 unreal.EditorAssetLibrary.save_asset(BP_VSPLAYER_PATH)
-    except Exception as e:
-        # Non-fatal: AnimBP itself was built. Surface the wiring failure for the user.
+                result["created"].append("BP_VSPlayer.AnimClass->ABP_VSPlayer")
+            else:
+                result["failed"].append("BP_VSPlayer mesh or ABP generated class unavailable")
+    except Exception as e:  # noqa: BLE001
         result["failed"].append(f"BP_VSPlayer AnimClass wiring failed: {e}")
 
     (result["skipped"] if pre_existed else result["created"]).append(ASSET_NAME)

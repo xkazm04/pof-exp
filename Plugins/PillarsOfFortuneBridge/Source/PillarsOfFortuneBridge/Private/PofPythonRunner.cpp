@@ -60,19 +60,34 @@ FPofPythonOutcome UPofPythonRunner::Run(const FString& Module, const FString& Fu
     FPythonCommandEx Cmd;
     Cmd.Command = Wrapper;
     Cmd.ExecutionMode = EPythonCommandExecutionMode::ExecuteFile;
+    // Capture print() output: the Python plugin routes stdout into Cmd.LogOutput
+    // (one entry per log line), NOT into Cmd.CommandResult (which only holds the
+    // repr of the last evaluated expression in EvaluateStatement mode).
     Py->ExecPythonCommandEx(Cmd);
 
-    // The marker line appears in CommandResult (Python plugin captures stdout).
-    const int32 Idx = Cmd.CommandResult.Find(RESULT_MARKER);
+    // Reassemble the captured stdout/stderr lines and find our marker line.
+    FString Captured;
+    for (const FPythonLogOutputEntry& Entry : Cmd.LogOutput)
+    {
+        Captured += Entry.Output;
+        Captured += TEXT("\n");
+    }
+    // Fall back to CommandResult in case a future plugin version populates it.
+    if (Captured.IsEmpty())
+    {
+        Captured = Cmd.CommandResult;
+    }
+
+    const int32 Idx = Captured.Find(RESULT_MARKER);
     if (Idx == INDEX_NONE)
     {
         Outcome.ErrorMessage = FString::Printf(TEXT("Python produced no result marker. Raw output: %s"),
-            Cmd.CommandResult.IsEmpty() ? TEXT("<empty>") : *Cmd.CommandResult);
+            Captured.IsEmpty() ? TEXT("<empty>") : *Captured.Left(2000));
         return Outcome;
     }
 
-    Outcome.ResultJson = Cmd.CommandResult.Mid(Idx + FCString::Strlen(RESULT_MARKER)).TrimStartAndEnd();
-    // Trim trailing newline / extra Python output appended after our marker line
+    Outcome.ResultJson = Captured.Mid(Idx + FCString::Strlen(RESULT_MARKER)).TrimStartAndEnd();
+    // The marker line is followed by a newline; keep only up to it.
     int32 NewlineIdx;
     if (Outcome.ResultJson.FindChar(TEXT('\n'), NewlineIdx))
     {

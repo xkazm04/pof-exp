@@ -22,10 +22,12 @@
 
 // AnimGraph node types
 #include "AnimGraphNode_BlendSpaceEvaluator.h"
+#include "AnimGraphNode_BlendSpacePlayer.h"
 #include "AnimGraphNode_Root.h"
 #include "AnimGraphNode_Slot.h"
 #include "AnimGraphNode_StateMachine.h"
 #include "AnimStateNode.h"
+#include "AnimStateEntryNode.h"
 #include "AnimationGraph.h"
 #include "AnimationStateGraph.h"
 #include "AnimationStateMachineGraph.h"
@@ -207,6 +209,22 @@ bool UPoFAnimBPAuthoringLibrary::AddBlendSpaceState(UAnimBlueprint* AnimBP,
     UEdGraph* StateGraph = State->BoundGraph;
     FBlueprintEditorUtils::RenameGraph(StateGraph, *StateName);
 
+    // Connect the state machine's Entry node to this state (the initial/default state).
+    // Without this the compiler warns "no entry state connection" and the SM produces
+    // no pose at runtime. Only wire it if the entry isn't already connected.
+    if (UAnimationStateMachineGraph* SMG = Cast<UAnimationStateMachineGraph>(SMGraph))
+    {
+        if (SMG->EntryNode)
+        {
+            UEdGraphPin* EntryOut = SMG->EntryNode->GetOutputPin();
+            UEdGraphPin* StateIn = State->GetInputPin();
+            if (EntryOut && StateIn && EntryOut->LinkedTo.Num() == 0)
+            {
+                EntryOut->MakeLinkTo(StateIn);
+            }
+        }
+    }
+
     // Spawn the BlendSpace evaluator
     UAnimGraphNode_BlendSpaceEvaluator* BSEval = SpawnAnimGraphNode<UAnimGraphNode_BlendSpaceEvaluator>(StateGraph, 0, 0);
     BSEval->Node.SetBlendSpace(BlendSpace);
@@ -262,6 +280,84 @@ bool UPoFAnimBPAuthoringLibrary::AddDefaultSlot(UAnimBlueprint* AnimBP, const FS
 
     UAnimGraphNode_Slot* Slot = SpawnAnimGraphNode<UAnimGraphNode_Slot>(AnimGraph, 200, 0);
     Slot->Node.SlotName = FName(*SlotName);
+
+    FBlueprintEditorUtils::MarkBlueprintAsModified(AnimBP);
+    return true;
+}
+
+// =====================================================================
+// AddBlendSpacePlayerToOutput  (no state machine — bulletproof for locomotion)
+// =====================================================================
+
+bool UPoFAnimBPAuthoringLibrary::AddBlendSpacePlayerToOutput(UAnimBlueprint* AnimBP,
+    UBlendSpace* BlendSpace, const FString& SpeedVarName, const FString& DirectionVarName,
+    const FString& SlotName)
+{
+    if (!AnimBP || !BlendSpace) return false;
+    UEdGraph* AnimGraph = FindAnimGraph(AnimBP);
+    if (!AnimGraph) return false;
+    UAnimGraphNode_Root* Root = FindResultRoot(AnimGraph);
+    if (!Root) return false;
+
+    // Ensure the two driver float variables exist on the AnimBP.
+    auto EnsureFloatVar = [AnimBP](const FString& VarName)
+    {
+        FEdGraphPinType FloatPin;
+        FloatPin.PinCategory = UEdGraphSchema_K2::PC_Real;
+        FloatPin.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+        FBlueprintEditorUtils::AddMemberVariable(AnimBP, FName(*VarName), FloatPin);
+    };
+    EnsureFloatVar(SpeedVarName);
+    EnsureFloatVar(DirectionVarName);
+
+    // BlendSpace player node, pins regenerated after the blend space is set so the
+    // axis pins are named after the BS axes (e.g. "Direction"/"Speed").
+    UAnimGraphNode_BlendSpacePlayer* BSP = SpawnAnimGraphNode<UAnimGraphNode_BlendSpacePlayer>(AnimGraph, -400, 0);
+    BSP->Node.SetBlendSpace(BlendSpace);
+    BSP->ReconstructNode();
+
+    auto SpawnGetter = [AnimGraph](FName VarName) -> UK2Node_VariableGet*
+    {
+        UK2Node_VariableGet* Getter = NewObject<UK2Node_VariableGet>(AnimGraph);
+        Getter->VariableReference.SetSelfMember(VarName);
+        Getter->CreateNewGuid();
+        AnimGraph->AddNode(Getter, false, false);
+        Getter->PostPlacedNewNode();
+        Getter->AllocateDefaultPins();
+        return Getter;
+    };
+    UK2Node_VariableGet* SpeedGet = SpawnGetter(FName(*SpeedVarName));
+    UK2Node_VariableGet* DirGet   = SpawnGetter(FName(*DirectionVarName));
+
+    UEdGraphSchema_K2 const* Sch = GetDefault<UEdGraphSchema_K2>();
+    auto ConnectVar = [&](UK2Node_VariableGet* Getter, const FString& PinName, const TCHAR* Fallback)
+    {
+        UEdGraphPin* Pin = FindPin(BSP, *PinName);
+        if (!Pin) Pin = FindPin(BSP, Fallback);
+        if (Pin && Getter && Getter->Pins.Num() > 0) Sch->TryCreateConnection(Pin, Getter->Pins[0]);
+    };
+    ConnectVar(DirGet, DirectionVarName, TEXT("X"));
+    ConnectVar(SpeedGet, SpeedVarName, TEXT("Y"));
+
+    // Slot node (find or create) for montage layering.
+    UAnimGraphNode_Slot* Slot = FindSlotByName(AnimGraph, SlotName);
+    if (!Slot)
+    {
+        Slot = SpawnAnimGraphNode<UAnimGraphNode_Slot>(AnimGraph, -150, 0);
+        Slot->Node.SlotName = FName(*SlotName);
+    }
+
+    // Wire BlendSpacePlayer.Pose -> Slot.Source -> Root.Result.
+    UEdGraphPin* BspPose = FindPin(BSP, TEXT("Pose"));
+    UEdGraphPin* SlotIn  = FindPin(Slot, TEXT("Source"));
+    UEdGraphPin* SlotOut = FindPin(Slot, TEXT("Pose"));
+    if (!SlotOut) SlotOut = FindPin(Slot, TEXT("Result"));
+    UEdGraphPin* RootIn  = FindPin(Root, TEXT("Result"));
+    if (!RootIn) RootIn = FindPin(Root, TEXT("Pose"));
+    if (SlotIn) SlotIn->BreakAllPinLinks();
+    if (RootIn) RootIn->BreakAllPinLinks();
+    if (BspPose && SlotIn) Sch->TryCreateConnection(BspPose, SlotIn);
+    if (SlotOut && RootIn) Sch->TryCreateConnection(SlotOut, RootIn);
 
     FBlueprintEditorUtils::MarkBlueprintAsModified(AnimBP);
     return true;

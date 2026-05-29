@@ -37,3 +37,7 @@ Thumbs.db
 # Mixamo source FBXs — user-downloaded, not committed (~5–50 MB each)
 Content/Source/Mixamo/Raw/*.fbx
 Content/Source/Mixamo/Raw/*.FBX
+
+# Python bytecode caches
+Content/Python/**/__pycache__/
+*.pyc

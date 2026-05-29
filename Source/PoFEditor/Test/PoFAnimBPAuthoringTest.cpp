@@ -114,14 +114,10 @@ bool FPoFAnimBPAuthoringFullRoundTripTest::RunTest(const FString& Parameters)
     UAnimBlueprint* ABP = UPoFAnimBPAuthoringLibrary::CreateAnimBlueprint(Skel, PackagePath, AssetName);
     if (!TestNotNull(TEXT("ABP created"), ABP)) return false;
 
-    TestTrue(TEXT("state machine"), UPoFAnimBPAuthoringLibrary::AddStateMachine(ABP, TEXT("Loco")));
-    TestTrue(TEXT("blend space state"),
-        UPoFAnimBPAuthoringLibrary::AddBlendSpaceState(ABP, TEXT("Loco"), TEXT("Strafe"),
-            BS, TEXT("Speed"), TEXT("Direction")));
-    TestTrue(TEXT("default slot"),
-        UPoFAnimBPAuthoringLibrary::AddDefaultSlot(ABP, TEXT("DefaultSlot")));
-    TestTrue(TEXT("connect SM -> Slot -> Output"),
-        UPoFAnimBPAuthoringLibrary::ConnectStateMachineToOutputPose(ABP, TEXT("Loco"), TEXT("DefaultSlot")));
+    // The no-state-machine locomotion graph: BlendSpacePlayer -> Slot -> Output.
+    TestTrue(TEXT("blend space player to output"),
+        UPoFAnimBPAuthoringLibrary::AddBlendSpacePlayerToOutput(
+            ABP, BS, TEXT("Speed"), TEXT("Direction"), TEXT("DefaultSlot")));
     TestTrue(TEXT("compile + save"), UPoFAnimBPAuthoringLibrary::CompileAndSave(ABP));
     TestEqual(TEXT("compile status up to date"),
         static_cast<int32>(ABP->Status), static_cast<int32>(EBlueprintStatus::BS_UpToDate));

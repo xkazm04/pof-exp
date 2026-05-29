@@ -32,11 +32,12 @@ def _load_blueprint_cdo(blueprint_path):
     bp = unreal.EditorAssetLibrary.load_asset(blueprint_path)
     if not bp:
         return None
-    generated_class = getattr(bp, "generated_class", None)
-    if generated_class:
-        # UBlueprint.generated_class is a UClass; default object lives on it
-        return unreal.get_default_object(generated_class)
-    return None
+    # UBlueprint.generated_class is a METHOD in UE Python — call it to get the UClass.
+    try:
+        gen_class = bp.generated_class()
+    except Exception:
+        return None
+    return unreal.get_default_object(gen_class) if gen_class else None
 
 
 def run(args):

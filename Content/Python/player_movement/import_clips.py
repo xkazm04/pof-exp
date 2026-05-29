@@ -27,35 +27,56 @@ EXPECTED_CLIPS = [
 ]
 
 
-def _build_import_task(fbx_path, with_skin):
-    """Build an AssetImportTask for a single Mixamo FBX clip."""
+SKELETON_PATH = f"{DEST_PACKAGE}/Standard_Idle_Skeleton"
+
+
+def _resolve_fbx(raw_dir, name):
+    fbx = os.path.join(raw_dir, f"{name}.fbx")
+    if os.path.exists(fbx):
+        return fbx
+    fbx_upper = os.path.join(raw_dir, f"{name}.FBX")
+    return fbx_upper if os.path.exists(fbx_upper) else None
+
+
+def _skin_task(fbx_path):
+    """Import task for the rig-bearing clip — produces the SkeletalMesh + Skeleton."""
     task = unreal.AssetImportTask()
     task.filename = fbx_path
     task.destination_path = DEST_PACKAGE
     task.replace_existing = True
     task.automated = True
     task.save = True
+    opts = unreal.FbxImportUI()
+    opts.import_mesh = True
+    opts.import_as_skeletal = True
+    opts.import_animations = True
+    opts.set_editor_property("mesh_type_to_import", unreal.FBXImportType.FBXIT_SKELETAL_MESH)
+    task.options = opts
+    return task
 
-    # Mixamo-specific FBX options (set what's available on the current UE Python build)
-    try:
-        opts = unreal.FbxImportUI()
-        opts.import_animations = True
-        opts.import_mesh = with_skin
-        opts.import_as_skeletal = with_skin
-        opts.set_editor_property("automated_import_should_detect_type", False)
-        opts.set_editor_property("mesh_type_to_import",
-                                 unreal.FBXImportType.FBXIT_SKELETAL_MESH if with_skin
-                                 else unreal.FBXImportType.FBXIT_ANIMATION)
-        task.options = opts
-    except Exception:
-        # If the property names shift between UE versions, fall back to default options.
-        pass
 
+def _anim_task(fbx_path, skeleton):
+    """Import task for an anim-only clip — REQUIRES the target skeleton, else UE
+    can't import the animation (this was the cause of 'import did not produce')."""
+    task = unreal.AssetImportTask()
+    task.filename = fbx_path
+    task.destination_path = DEST_PACKAGE
+    task.replace_existing = True
+    task.automated = True
+    task.save = True
+    opts = unreal.FbxImportUI()
+    opts.skeleton = skeleton
+    opts.import_mesh = False
+    opts.import_as_skeletal = True
+    opts.import_animations = True
+    opts.set_editor_property("mesh_type_to_import", unreal.FBXImportType.FBXIT_ANIMATION)
+    task.options = opts
     return task
 
 
 def run(args):
-    """Import every FBX in `raw_dir` matching EXPECTED_CLIPS."""
+    """Two-phase import: skin clip first (brings the skeleton), then anim-only clips
+    bound to that skeleton."""
     raw_dir = args.get("raw_dir")
     result = {"created": [], "skipped": [], "failed": []}
 
@@ -63,34 +84,53 @@ def run(args):
         result["failed"].append(f"raw_dir not found or not a directory: {raw_dir}")
         return result
 
-    tasks = []
-    for i, name in enumerate(EXPECTED_CLIPS):
-        fbx = os.path.join(raw_dir, f"{name}.fbx")
-        if not os.path.exists(fbx):
-            # Try uppercase too (some Mixamo downloads use .FBX)
-            fbx_upper = os.path.join(raw_dir, f"{name}.FBX")
-            if os.path.exists(fbx_upper):
-                fbx = fbx_upper
-            else:
-                result["failed"].append(f"missing source FBX: {name}.fbx")
-                continue
+    asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 
+    # ── Phase 1: the rig-bearing clip (Standard_Idle, with skin) ──────────────
+    skin_name = EXPECTED_CLIPS[0][0] if isinstance(EXPECTED_CLIPS[0], tuple) else EXPECTED_CLIPS[0]
+    if not unreal.EditorAssetLibrary.does_asset_exist(f"{DEST_PACKAGE}/{skin_name}"):
+        fbx = _resolve_fbx(raw_dir, skin_name)
+        if not fbx:
+            result["failed"].append(f"missing source FBX: {skin_name}.fbx")
+            return result
+        asset_tools.import_asset_tasks([_skin_task(fbx)])
+        if unreal.EditorAssetLibrary.does_asset_exist(f"{DEST_PACKAGE}/{skin_name}"):
+            result["created"].append(skin_name)
+        else:
+            result["failed"].append(f"import did not produce skin clip: {skin_name}")
+            return result
+    else:
+        result["skipped"].append(skin_name)
+
+    # ── Resolve the skeleton the skin import created ──────────────────────────
+    skeleton = unreal.EditorAssetLibrary.load_asset(SKELETON_PATH)
+    if not skeleton:
+        # Fall back: scan the dest folder for any *_Skeleton
+        ar = unreal.AssetRegistryHelpers.get_asset_registry()
+        for a in ar.get_assets_by_path(DEST_PACKAGE, recursive=False):
+            path = str(a.object_path) if hasattr(a, "object_path") else str(a.package_name)
+            if path.endswith("_Skeleton"):
+                skeleton = unreal.EditorAssetLibrary.load_asset(path.split(".")[0])
+                break
+    if not skeleton:
+        result["failed"].append(f"could not resolve skeleton at {SKELETON_PATH} after skin import")
+        return result
+
+    # ── Phase 2: anim-only clips, each bound to the skeleton ──────────────────
+    for entry in EXPECTED_CLIPS[1:]:
+        name = entry[0] if isinstance(entry, tuple) else entry
         target = f"{DEST_PACKAGE}/{name}"
         if unreal.EditorAssetLibrary.does_asset_exist(target):
             result["skipped"].append(name)
             continue
-
-        # The first clip carries the skeletal mesh (with skin). Everything else is anim-only.
-        with_skin = (i == 0)
-        tasks.append((name, _build_import_task(fbx, with_skin)))
-
-    if tasks:
-        asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
-        asset_tools.import_asset_tasks([t for _, t in tasks])
-        for name, _ in tasks:
-            if unreal.EditorAssetLibrary.does_asset_exist(f"{DEST_PACKAGE}/{name}"):
-                result["created"].append(name)
-            else:
-                result["failed"].append(f"import did not produce: {name}")
+        fbx = _resolve_fbx(raw_dir, name)
+        if not fbx:
+            result["failed"].append(f"missing source FBX: {name}.fbx")
+            continue
+        asset_tools.import_asset_tasks([_anim_task(fbx, skeleton)])
+        if unreal.EditorAssetLibrary.does_asset_exist(target):
+            result["created"].append(name)
+        else:
+            result["failed"].append(f"import did not produce: {name}")
 
     return result

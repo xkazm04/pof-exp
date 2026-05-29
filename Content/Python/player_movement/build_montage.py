@@ -1,7 +1,8 @@
-"""Step 09 — Build AM_Roll montage from the retargeted Forward_Roll clip.
+"""Step 09 — Build AM_Roll montage from the retargeted Forward_Roll clip (UE 5.7).
 
-Adds an `AnimNotify_DodgeWindow` notify at frame 2 (~0.067s @ 30fps) which the
-C++ side (`AARPGPlayerCharacter::SetRollIFrameActive`) reads to enable iframes.
+The montage's slot animation is populated by setting AnimMontageFactory.source_animation
+(there is no Python API to add a slot track after creation). An AnimNotifyState_DodgeIFrame
+is added on a "DodgeWindow" notify track for the iframe window.
 """
 
 import unreal
@@ -11,7 +12,8 @@ PACKAGE = "/Game/Characters/Player/Animations"
 ASSET_NAME = "AM_Roll"
 SRC_PATH = "/Game/Mixamo/Retargeted/SKM_Manny/Forward_Roll_RT"
 
-DODGE_WINDOW_TIME = 2.0 / 30.0  # frame 2 at 30 fps
+DODGE_WINDOW_START = 2.0 / 30.0   # frame 2
+DODGE_WINDOW_DURATION = 4.0 / 30.0  # ~4 frames of iframes
 
 
 def run(args):
@@ -23,55 +25,40 @@ def run(args):
         return result
 
     target_path = f"{PACKAGE}/{ASSET_NAME}"
+    # Recreate cleanly — montage slot content can only be set at creation time via
+    # the factory's source_animation, so a previously-empty AM_Roll must be replaced.
     if unreal.EditorAssetLibrary.does_asset_exist(target_path):
-        result["skipped"].append(ASSET_NAME)
-        return result
+        unreal.EditorAssetLibrary.delete_asset(target_path)
 
     try:
         tools = unreal.AssetToolsHelpers.get_asset_tools()
-        # AnimMontageFactory may not be available in every UE version; fall back to
-        # AnimationAssetFactory or direct creation.
-        factory = None
+        factory = unreal.AnimMontageFactory()
+        factory.set_editor_property("source_animation", src)
         try:
-            factory = unreal.AnimMontageFactory()
-            if hasattr(factory, "set_editor_property"):
-                try:
-                    factory.set_editor_property("preview_anim_sequence", src)
-                except Exception:
-                    pass
-                try:
-                    factory.set_editor_property("target_skeleton", src.get_skeleton())
-                except Exception:
-                    pass
+            factory.set_editor_property("target_skeleton", src.get_skeleton())
         except Exception:
-            factory = None
+            pass
 
         montage = tools.create_asset(ASSET_NAME, PACKAGE, unreal.AnimMontage, factory)
         if not montage:
             result["failed"].append(f"create_asset failed for {ASSET_NAME}")
             return result
 
-        # Slot anim track: DefaultGroup.DefaultSlot referencing src
-        try:
-            unreal.AnimationLibrary.add_slot_animation_track(montage, "DefaultSlot", src)
-        except Exception as e:
-            result["failed"].append(f"add_slot_animation_track: {e}")
-
-        # iframe notify state at frame 2 — duration covers the roll's vulnerable peak
-        try:
-            notify_class = getattr(unreal, "AnimNotifyState_DodgeIFrame", None)
-            if notify_class:
-                # The state notify uses a duration; 4 frames at 30fps ≈ 0.13s of iframes.
-                unreal.AnimationLibrary.add_animation_notify_event(
-                    montage, DODGE_WINDOW_TIME, 4.0 / 30.0, notify_class, "DodgeIFrame"
+        # iframe NotifyState on a dedicated track
+        notify_state = getattr(unreal, "AnimNotifyState_DodgeIFrame", None)
+        if notify_state:
+            try:
+                unreal.AnimationLibrary.add_animation_notify_track(montage, "DodgeWindow")
+                unreal.AnimationLibrary.add_animation_notify_state_event(
+                    montage, "DodgeWindow", DODGE_WINDOW_START, DODGE_WINDOW_DURATION, notify_state
                 )
-        except Exception as e:
-            # Non-fatal: the montage is usable without iframes, just won't have invuln.
-            result["failed"].append(f"add iframe notify: {e}")
+            except Exception as e:  # noqa: BLE001
+                # Non-fatal: the montage plays the roll without iframes.
+                result["failed"].append(f"add iframe notify: {e}")
 
         unreal.EditorAssetLibrary.save_asset(target_path)
         result["created"].append(ASSET_NAME)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         result["failed"].append(str(e))
 
     return result

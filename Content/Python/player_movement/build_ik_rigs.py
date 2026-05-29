@@ -1,136 +1,101 @@
-"""Step 04 — Build IK_Mixamo + IK_Manny + RTG_MixamoToManny.
+"""Step 04 — Build IK_Mixamo + IK_Manny + RTG_MixamoToManny (UE 5.7 IK API).
 
-Idempotent: skips assets that already exist. The IK rigs use the deterministic
-Mixamo X-Bot bone names and the standard UE5 Manny bone names. Retarget pose
-defaults to identity since both skeletons share an A-pose family.
+Uses the engine's auto-template detection: both the Mixamo (X Bot) and UE5 Manny
+skeletons match known templates, so `apply_auto_generated_retarget_definition()`
+generates the retarget chains + pelvis automatically — far more robust than
+hand-coded bone-name chains. Idempotent: skips assets that already exist.
 """
 
 import unreal
 
 
-DEST_PACKAGE = "/Game/Characters/Player/IK"
+DEST = "/Game/Characters/Player/IK"
 
-# Source skeleton paths
-SKEL_MIXAMO = "/Game/Mixamo/Raw/Standard_Idle_Skeleton"
-SKEL_MANNY_CANDIDATES = [
-    "/Game/Characters/Mannequins/Meshes/SK_Mannequin_Skeleton",
-    "/Game/Characters/Manny/Meshes/SK_Mannequin_Skeleton",
+# Source skeletal MESHES (the 5.7 IK rig binds to a mesh, not a skeleton).
+XBOT_MESH = "/Game/Mixamo/Raw/Standard_Idle"
+MANNY_MESH_CANDIDATES = [
+    "/MoverTests/Characters/Mannequins/Meshes/SKM_Manny",
+    "/MoverExamples/Characters/Mannequins/Meshes/SKM_Manny_Simple",
 ]
 
-# Mixamo X-Bot bone hierarchy (deterministic per character)
-MIXAMO_CHAINS = {
-    "Spine":   ("Spine", "Spine2"),
-    "Head":    ("Neck",  "Head"),
-    "ArmL":    ("LeftShoulder",  "LeftHand"),
-    "ArmR":    ("RightShoulder", "RightHand"),
-    "LegL":    ("LeftUpLeg",  "LeftToeBase"),
-    "LegR":    ("RightUpLeg", "RightToeBase"),
-}
 
-# UE5 Manny bone names
-MANNY_CHAINS = {
-    "Spine":   ("spine_01", "spine_05"),
-    "Head":    ("neck_01",  "head"),
-    "ArmL":    ("clavicle_l", "hand_l"),
-    "ArmR":    ("clavicle_r", "hand_r"),
-    "LegL":    ("thigh_l", "ball_l"),
-    "LegR":    ("thigh_r", "ball_r"),
-}
-
-
-def _find_manny_skeleton():
-    for path in SKEL_MANNY_CANDIDATES:
-        if unreal.EditorAssetLibrary.does_asset_exist(path):
-            return path
+def _find_manny_mesh():
+    for p in MANNY_MESH_CANDIDATES:
+        if unreal.EditorAssetLibrary.does_asset_exist(p):
+            return p
     return None
 
 
-def _build_ik_rig(name, skeleton_path, chains):
-    """Create an IKRigDefinition asset with retarget chains. Returns (was_created, asset_path)."""
-    asset_path = f"{DEST_PACKAGE}/{name}"
+def _build_ik_rig(name, mesh_path):
+    """Create an IKRigDefinition for a skeletal mesh + auto-generate chains.
+    Returns (was_created, asset_or_none)."""
+    asset_path = f"{DEST}/{name}"
     if unreal.EditorAssetLibrary.does_asset_exist(asset_path):
-        return False, asset_path
+        return False, unreal.EditorAssetLibrary.load_asset(asset_path)
 
-    skel = unreal.EditorAssetLibrary.load_asset(skeleton_path)
-    if not skel:
-        raise RuntimeError(f"skeleton not found: {skeleton_path}")
+    mesh = unreal.EditorAssetLibrary.load_asset(mesh_path)
+    if not mesh:
+        raise RuntimeError(f"skeletal mesh not found: {mesh_path}")
 
     tools = unreal.AssetToolsHelpers.get_asset_tools()
-    # IKRigDefinitionFactory may not be Python-exposed in every UE version; create_asset can
-    # accept None for the factory in some builds.
-    factory = None
-    try:
-        factory = unreal.IKRigDefinitionFactory()
-        factory.set_editor_property("target_skeleton_asset", skel)
-    except Exception:
-        pass
-
-    rig = tools.create_asset(name, DEST_PACKAGE, unreal.IKRigDefinition, factory)
+    factory = unreal.IKRigDefinitionFactory()
+    rig = tools.create_asset(name, DEST, unreal.IKRigDefinition, factory)
     if not rig:
         raise RuntimeError(f"create_asset failed for IK rig {name}")
 
     ctrl = unreal.IKRigController.get_controller(rig)
-    ctrl.set_skeleton(skel)
-    for chain_name, (start, end) in chains.items():
-        try:
-            ctrl.add_retarget_chain(chain_name, start, end, "")
-        except Exception as e:
-            # Soft-fail per-chain so partial setup doesn't lose the whole rig
-            unreal.log_warning(f"[build_ik_rigs] chain {chain_name} ({start}->{end}) failed: {e}")
-
+    ctrl.set_skeletal_mesh(mesh)
+    matched = ctrl.apply_auto_generated_retarget_definition()
+    if not matched:
+        unreal.log_warning(
+            f"[build_ik_rigs] {name}: no known skeletal template matched — "
+            f"retarget chains may be incomplete"
+        )
     unreal.EditorAssetLibrary.save_asset(asset_path)
-    return True, asset_path
+    return True, rig
 
 
-def _build_retargeter(name, source_rig_path, target_rig_path):
-    asset_path = f"{DEST_PACKAGE}/{name}"
+def _build_retargeter(name, src_rig, tgt_rig):
+    asset_path = f"{DEST}/{name}"
     if unreal.EditorAssetLibrary.does_asset_exist(asset_path):
-        return False, asset_path
+        return False, unreal.EditorAssetLibrary.load_asset(asset_path)
 
     tools = unreal.AssetToolsHelpers.get_asset_tools()
-    rtg = tools.create_asset(name, DEST_PACKAGE, unreal.IKRetargeter, None)
+    rtg = tools.create_asset(name, DEST, unreal.IKRetargeter, None)
     if not rtg:
         raise RuntimeError(f"create_asset failed for retargeter {name}")
 
     ctrl = unreal.IKRetargeterController.get_controller(rtg)
-    src = unreal.EditorAssetLibrary.load_asset(source_rig_path)
-    tgt = unreal.EditorAssetLibrary.load_asset(target_rig_path)
-    if not src or not tgt:
-        raise RuntimeError("source or target IK rig missing")
-
-    ctrl.set_ik_rig(unreal.RetargetSourceOrTarget.SOURCE, src)
-    ctrl.set_ik_rig(unreal.RetargetSourceOrTarget.TARGET, tgt)
+    ctrl.set_ik_rig(unreal.RetargetSourceOrTarget.SOURCE, src_rig)
+    ctrl.set_ik_rig(unreal.RetargetSourceOrTarget.TARGET, tgt_rig)
+    ctrl.add_default_ops()  # Pelvis Motion, FK Chains, IK Chains, IK Solve, Root Motion
+    ctrl.auto_map_chains(unreal.AutoMapChainType.FUZZY, True)
     unreal.EditorAssetLibrary.save_asset(asset_path)
-    return True, asset_path
+    return True, rtg
 
 
 def run(args):
     result = {"created": [], "skipped": [], "failed": []}
     try:
-        manny_skel_path = _find_manny_skeleton()
-        if not manny_skel_path:
-            result["failed"].append("UE5 Manny skeleton not found in any candidate path")
+        if not unreal.EditorAssetLibrary.does_asset_exist(XBOT_MESH):
+            result["failed"].append(f"Mixamo X Bot mesh not imported at {XBOT_MESH}; run step 03 first")
+            return result
+        manny_mesh = _find_manny_mesh()
+        if not manny_mesh:
+            result["failed"].append("UE5 Manny skeletal mesh not found (MoverTests/MoverExamples)")
             return result
 
-        if not unreal.EditorAssetLibrary.does_asset_exist(SKEL_MIXAMO):
-            result["failed"].append(
-                f"Mixamo skeleton not yet imported at {SKEL_MIXAMO}; run step 03 first"
-            )
-            return result
-
-        created, _ = _build_ik_rig("IK_Mixamo", SKEL_MIXAMO, MIXAMO_CHAINS)
+        created, ik_mixamo = _build_ik_rig("IK_Mixamo", XBOT_MESH)
         (result["created"] if created else result["skipped"]).append("IK_Mixamo")
-
-        created, _ = _build_ik_rig("IK_Manny", manny_skel_path, MANNY_CHAINS)
+        created, ik_manny = _build_ik_rig("IK_Manny", manny_mesh)
         (result["created"] if created else result["skipped"]).append("IK_Manny")
 
-        created, _ = _build_retargeter(
-            "RTG_MixamoToManny",
-            f"{DEST_PACKAGE}/IK_Mixamo",
-            f"{DEST_PACKAGE}/IK_Manny",
-        )
-        (result["created"] if created else result["skipped"]).append("RTG_MixamoToManny")
-    except Exception as e:
-        result["failed"].append(str(e))
+        if not ik_mixamo or not ik_manny:
+            result["failed"].append("IK rig load failed; cannot build retargeter")
+            return result
 
+        created, _ = _build_retargeter("RTG_MixamoToManny", ik_mixamo, ik_manny)
+        (result["created"] if created else result["skipped"]).append("RTG_MixamoToManny")
+    except Exception as e:  # noqa: BLE001
+        result["failed"].append(str(e))
     return result
