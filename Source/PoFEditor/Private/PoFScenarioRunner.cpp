@@ -255,6 +255,19 @@ FPoFScenarioResult UPoFScenarioRunner::RunScenarioEx(const FString& MapPath,
     return Result;
 }
 
+bool UPoFScenarioRunner::StartPie(const FString& MapPath)
+{
+    if (!GEditor)
+    {
+        return false;
+    }
+    FEditorFileUtils::LoadMap(MapPath, /*bLoadAsTemplate*/ false, /*bShowProgress*/ false);
+    FRequestPlaySessionParams Params;
+    GEditor->RequestPlaySession(Params);
+    GEditor->StartQueuedPlaySessionRequest();
+    return true; // PIE starts + ticks on the editor's own loop after we return
+}
+
 void UPoFScenarioRunner::StopScenario()
 {
     if (GEditor)

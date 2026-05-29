@@ -101,6 +101,13 @@ public:
     static FPoFScenarioResult RunScenarioEx(const FString& MapPath, const TArray<FPoFTimedInput>& Inputs,
         float TotalSeconds, const FString& FrameDir, int32 NumSamples);
 
+    /** Load the map and START PIE, then RETURN immediately (no manual tick). The editor's
+     *  own main loop ticks PIE naturally — faithful to real play — so a runtime
+     *  UScenarioController (armed via -PoFScenario=) runs in that natural loop. Poll for the
+     *  scenario's DONE marker, then StopScenario. */
+    UFUNCTION(BlueprintCallable, Category = "PoF|Scenario")
+    static bool StartPie(const FString& MapPath);
+
     UFUNCTION(BlueprintCallable, Category = "PoF|Scenario")
     static void StopScenario();
 };
