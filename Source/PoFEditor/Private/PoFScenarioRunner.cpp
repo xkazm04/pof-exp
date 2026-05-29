@@ -2,19 +2,22 @@
 
 #include "PoFScenarioRunner.h"
 
+#include "Components/SceneCaptureComponent2D.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "Engine/Engine.h"
+#include "Engine/SceneCapture2D.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "EnhancedInputSubsystems.h"
 #include "FileHelpers.h"
+#include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
-#include "HighResScreenshot.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
+#include "Kismet/KismetRenderingLibrary.h"
+#include "Misc/Paths.h"
 #include "RenderingThread.h"
-#include "UnrealClient.h"
-#include "Engine/GameViewportClient.h"
 
 static UWorld* FindPieWorld()
 {
@@ -90,22 +93,41 @@ bool UPoFScenarioRunner::RunScenario(const FString& MapPath, const TArray<FPoFTi
         World->Tick(LEVELTICK_All, 1.f / 60.f);
     }
 
-    // Capture a screenshot of the live PIE game view — the deterministic T4 moment
-    // (character posed, PIE active). Requested on the viewport, then we tick + flush
-    // so the rendering thread writes the PNG before we return.
+    // Capture via a SceneCapture2D -> render target -> PNG. This renders through the
+    // pipeline independent of any editor/PIE viewport or swapchain (the high-res
+    // viewport screenshot captured the empty editor perspective, not the game view).
+    // The camera is placed behind + above the pawn, framing it.
     if (!ScreenshotPath.IsEmpty())
     {
-        if (UGameViewportClient* VP = World->GetGameViewport())
+        APawn* Pawn = PC->GetPawn();
+        const FVector PawnLoc = Pawn->GetActorLocation();
+        const FVector LookAt = PawnLoc + FVector(0, 0, 90.f);          // chest height
+        const FVector CamLoc = PawnLoc + Pawn->GetActorForwardVector() * -320.f + FVector(0, 0, 170.f);
+        const FRotator CamRot = (LookAt - CamLoc).Rotation();
+
+        UTextureRenderTarget2D* RT = NewObject<UTextureRenderTarget2D>(World);
+        RT->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
+        RT->InitAutoFormat(512, 512);
+        RT->UpdateResourceImmediate(true);
+
+        ASceneCapture2D* Cap = World->SpawnActor<ASceneCapture2D>(CamLoc, CamRot);
+        if (Cap)
         {
-            GScreenshotResolutionX = 512;
-            GScreenshotResolutionY = 512;
-            FScreenshotRequest::RequestScreenshot(ScreenshotPath, /*bShowUI*/ false, /*bAddFilenameSuffix*/ false);
-            VP->Viewport->TakeHighResScreenShot();
-            for (int32 i = 0; i < 12; ++i)
-            {
-                World->Tick(LEVELTICK_All, 1.f / 60.f);
-                FlushRenderingCommands();
-            }
+            USceneCaptureComponent2D* CapComp = Cap->GetCaptureComponent2D();
+            CapComp->TextureTarget = RT;
+            CapComp->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+            CapComp->FOVAngle = 75.f;
+            CapComp->bCaptureEveryFrame = false;
+            CapComp->bCaptureOnMovement = false;
+            // Tick a few frames so the world is fully rendered, then capture + flush.
+            for (int32 i = 0; i < 3; ++i) { World->Tick(LEVELTICK_All, 1.f / 60.f); }
+            CapComp->CaptureScene();
+            FlushRenderingCommands();
+
+            const FString Dir = FPaths::GetPath(ScreenshotPath);
+            const FString Name = FPaths::GetBaseFilename(ScreenshotPath) + TEXT(".png");
+            UKismetRenderingLibrary::ExportRenderTarget(World, RT, Dir, Name);
+            Cap->Destroy();
         }
     }
 
