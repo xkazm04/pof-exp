@@ -18,6 +18,10 @@ struct FScnInput
     FString Key;
     FString ActionPath;
     FVector2D Value = FVector2D::ZeroVector;
+    /** Non-input event fired at Start: "activate_ability" => ASC TryActivateAbilitiesByTag(EventArg).
+     *  Bypasses input fidelity gaps to test the ability's effect directly (L3 for GAS). */
+    FString Event;
+    FString EventArg;
     float Start = 0.f;
     float Duration = 1.f;
 };

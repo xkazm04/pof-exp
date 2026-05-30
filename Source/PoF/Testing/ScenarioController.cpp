@@ -1,7 +1,10 @@
 #include "ScenarioController.h"
 
+#include "AbilitySystemComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimationAsset.h"
+#include "Animation/AnimMontage.h"
+#include "GameplayTagContainer.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Dom/JsonObject.h"
@@ -87,6 +90,8 @@ bool UScenarioController::LoadScenario(const FString& Path)
             FScnInput In;
             (*O)->TryGetStringField(TEXT("key"), In.Key);
             (*O)->TryGetStringField(TEXT("action"), In.ActionPath);
+            (*O)->TryGetStringField(TEXT("event"), In.Event);
+            (*O)->TryGetStringField(TEXT("event_arg"), In.EventArg);
             double S = 0.0;
             if ((*O)->TryGetNumberField(TEXT("start"), S)) In.Start = (float)S;
             if ((*O)->TryGetNumberField(TEXT("duration"), S)) In.Duration = (float)S;
@@ -178,6 +183,21 @@ void UScenarioController::ApplyInputs()
                 EI->InjectInputForAction(IA, FInputActionValue(In.Value), {}, {});
             }
         }
+        // Non-input event on the rising edge (activate an ability directly — bypasses the
+        // Boolean-key injection fidelity gap, so the ability's EFFECT is what we observe).
+        if (In.Event == TEXT("activate_ability") && bNow && !bWas)
+        {
+            if (APawn* P = PC->GetPawn())
+            {
+                if (UAbilitySystemComponent* ASC = P->FindComponentByClass<UAbilitySystemComponent>())
+                {
+                    FGameplayTagContainer Tags;
+                    Tags.AddTag(FGameplayTag::RequestGameplayTag(FName(*In.EventArg), /*ErrorIfNotFound*/ false));
+                    ASC->TryActivateAbilitiesByTag(Tags);
+                    UE_LOG(LogPoFScenario, Display, TEXT("[scenario] activate_ability %s"), *In.EventArg);
+                }
+            }
+        }
         if (WasActive.IsValidIndex(i)) WasActive[i] = bNow;
     }
 }
@@ -194,6 +214,19 @@ void UScenarioController::DoSample(int32 Idx)
         S->SetNumberField(TEXT("loc_y"), L.Y);
         S->SetNumberField(TEXT("loc_z"), L.Z);
         S->SetNumberField(TEXT("speed"), P->GetVelocity().Size2D());
+
+        // GAS attribute readout (reflection — works for any ARPG character/attribute set).
+        auto ReadAttr = [P](const TCHAR* N) -> double
+        {
+            if (FFloatProperty* Fp = FindFProperty<FFloatProperty>(P->GetClass(), N))
+                return Fp->GetPropertyValue_InContainer(P);
+            if (FDoubleProperty* Dp = FindFProperty<FDoubleProperty>(P->GetClass(), N))
+                return Dp->GetPropertyValue_InContainer(P);
+            return -1.0;
+        };
+        S->SetNumberField(TEXT("health"), ReadAttr(TEXT("Health")));
+        S->SetNumberField(TEXT("stamina"), ReadAttr(TEXT("Stamina")));
+        S->SetNumberField(TEXT("mana"), ReadAttr(TEXT("Mana")));
     }
     bool bPoseValid = false;
     if (USkeletalMeshComponent* Mesh = GetMesh())
@@ -232,6 +265,15 @@ void UScenarioController::DoSample(int32 Idx)
             };
             S->SetNumberField(TEXT("anim_speed"), ReadF(TEXT("Speed")));
             S->SetNumberField(TEXT("anim_direction"), ReadF(TEXT("Direction")));
+
+            // Montage state — abilities (attacks, dodge, casts) play montages; this is the
+            // primary "an ability activated" observable.
+            const bool bMontage = AI->IsAnyMontagePlaying();
+            S->SetBoolField(TEXT("montage_playing"), bMontage);
+            if (UAnimMontage* Active = AI->GetCurrentActiveMontage())
+            {
+                S->SetStringField(TEXT("montage_name"), Active->GetName());
+            }
         }
     }
     S->SetBoolField(TEXT("pose_valid"), bPoseValid);
