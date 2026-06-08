@@ -16,6 +16,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "Player/ARPGPlayerCharacter.h"
 #include "HAL/PlatformMisc.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
@@ -195,6 +196,23 @@ void UScenarioController::ApplyInputs()
                     Tags.AddTag(FGameplayTag::RequestGameplayTag(FName(*In.EventArg), /*ErrorIfNotFound*/ false));
                     ASC->TryActivateAbilitiesByTag(Tags);
                     UE_LOG(LogPoFScenario, Display, TEXT("[scenario] activate_ability %s"), *In.EventArg);
+                }
+            }
+        }
+        // Deterministic mouse-aim seam: place the player's cursor aim point at a fixed world
+        // location so "does the body face the cursor / does it strafe" is harness-verifiable
+        // without an OS mouse. Routed to AARPGPlayerCharacter::SetCursorWorldOverride.
+        if (In.Event == TEXT("set_cursor") && bNow && !bWas)
+        {
+            TArray<FString> Parts;
+            In.EventArg.ParseIntoArray(Parts, TEXT(","));
+            if (Parts.Num() >= 3)
+            {
+                const FVector Loc(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]), FCString::Atof(*Parts[2]));
+                if (AARPGPlayerCharacter* Player = Cast<AARPGPlayerCharacter>(PC->GetPawn()))
+                {
+                    Player->SetCursorWorldOverride(Loc);
+                    UE_LOG(LogPoFScenario, Display, TEXT("[scenario] set_cursor %s"), *In.EventArg);
                 }
             }
         }

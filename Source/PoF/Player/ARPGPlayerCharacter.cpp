@@ -50,6 +50,12 @@ AARPGPlayerCharacter::AARPGPlayerCharacter()
 
 	// --- Ability Unlock/Upgrade Component ---
 	AbilityUnlockComp = CreateDefaultSubobject<UARPGAbilityUnlockComponent>(TEXT("AbilityUnlockComp"));
+
+	// --- Top-down mouse-aim control scheme (ARPG baseline) ---
+	// Player faces the cursor, not its movement direction. PLAYER-ONLY: the shared
+	// AARPGCharacterBase keeps bOrientRotationToMovement=true for AI/NPCs.
+	bCursorAimActive = true;
+	GetCharacterMovement()->bOrientRotationToMovement = false;
 }
 
 void AARPGPlayerCharacter::BeginPlay()
@@ -74,6 +80,14 @@ void AARPGPlayerCharacter::BeginPlay()
 	// Broadcast initial values so any listening UI gets correct state
 	OnHealthChanged.Broadcast(Health, MaxHealth);
 	OnManaChanged.Broadcast(Mana, MaxMana);
+
+	// Enforce the mouse-aim scheme at runtime so a stale Blueprint default can't
+	// silently restore face-movement. Feel values stay BP-tunable (read each tick).
+	bCursorAimActive = true;
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->bOrientRotationToMovement = false;
+	}
 
 	// Enable mouse cursor for interaction targeting
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -621,11 +635,18 @@ void AARPGPlayerCharacter::UpdateCursorAim(float DeltaTime)
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC) return;
 
-	// Always update cursor world position for interaction targeting
-	FHitResult HitResult;
-	if (PC->GetHitResultUnderCursor(ECC_Visibility, false, HitResult))
+	// Cursor world position: a fixed override (test/AI seam) wins; otherwise trace under the mouse.
+	if (bUseCursorWorldOverride)
 	{
-		CursorWorldLocation = HitResult.ImpactPoint;
+		CursorWorldLocation = CursorWorldOverride;
+	}
+	else
+	{
+		FHitResult HitResult;
+		if (PC->GetHitResultUnderCursor(ECC_Visibility, false, HitResult))
+		{
+			CursorWorldLocation = HitResult.ImpactPoint;
+		}
 	}
 
 	// Rotate character toward cursor only when cursor aim is active

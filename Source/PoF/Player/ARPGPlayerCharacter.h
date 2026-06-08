@@ -246,6 +246,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Camera|Cursor")
 	bool IsCursorAimEnabled() const { return bCursorAimActive; }
 
+	/** TEST/AI SEAM: force the cursor aim point to a fixed world location (bypasses the
+	 *  mouse trace). The harness uses this to make mouse-aim deterministically verifiable;
+	 *  AI/scripted aim can use it too. Clear with ClearCursorWorldOverride(). */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Cursor")
+	void SetCursorWorldOverride(FVector WorldLocation) { CursorWorldOverride = WorldLocation; bUseCursorWorldOverride = true; }
+
+	UFUNCTION(BlueprintCallable, Category = "Camera|Cursor")
+	void ClearCursorWorldOverride() { bUseCursorWorldOverride = false; }
+
 	// =====================================================================
 	// Delegates — bind from HUD/widgets
 	// =====================================================================
@@ -402,6 +411,10 @@ private:
 
 	// Cursor aim state
 	FVector CursorWorldLocation = FVector::ZeroVector;
+
+	// Cursor aim override (test/AI seam — see SetCursorWorldOverride)
+	bool bUseCursorWorldOverride = false;
+	FVector CursorWorldOverride = FVector::ZeroVector;
 
 	// Interaction scan
 	TWeakObjectPtr<AActor> InteractionTarget;
