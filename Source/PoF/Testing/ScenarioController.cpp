@@ -322,6 +322,12 @@ FString UScenarioController::CaptureFrame(int32 Idx)
     C->TextureTarget = RT;
     C->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
     C->FOVAngle = 75.f;
+    // Deterministic exposure so sparse/dark test maps still render visibly (capture was
+    // coming back near-black under auto-exposure regardless of added lights).
+    C->PostProcessSettings.bOverride_AutoExposureMethod = true;
+    C->PostProcessSettings.AutoExposureMethod = AEM_Manual;
+    C->PostProcessSettings.bOverride_AutoExposureBias = true;
+    C->PostProcessSettings.AutoExposureBias = 10.0f;
     C->bCaptureEveryFrame = false;
     C->bCaptureOnMovement = false;
     C->CaptureScene();
@@ -331,6 +337,67 @@ FString UScenarioController::CaptureFrame(int32 Idx)
     UKismetRenderingLibrary::ExportRenderTarget(W, RT, OutDir, Name);
     Cap->Destroy();
     return FPaths::Combine(OutDir, Name);
+}
+
+void UScenarioController::RecordTrace(float DeltaTime)
+{
+    APawn* P = GetPawn();
+    if (!P) return;
+
+    const FVector Loc = P->GetActorLocation();
+    const FVector Vel = P->GetVelocity();
+
+    TSharedPtr<FJsonObject> R = MakeShared<FJsonObject>();
+    R->SetNumberField(TEXT("t"), ScnTime);
+    R->SetNumberField(TEXT("dt"), DeltaTime);
+    R->SetNumberField(TEXT("x"), Loc.X);
+    R->SetNumberField(TEXT("y"), Loc.Y);
+    R->SetNumberField(TEXT("vx"), Vel.X);
+    R->SetNumberField(TEXT("vy"), Vel.Y);
+    R->SetNumberField(TEXT("speed"), Vel.Size2D());
+    R->SetNumberField(TEXT("yaw"), P->GetActorRotation().Yaw);
+
+    // Capsule displacement this tick — what actually moved the character.
+    const FVector CapsuleDelta = bHavePrevTrace ? (Loc - PrevTraceLoc) : FVector::ZeroVector;
+    R->SetNumberField(TEXT("dCapX"), CapsuleDelta.X);
+    R->SetNumberField(TEXT("dCapY"), CapsuleDelta.Y);
+
+    // Animation root-motion this tick — what the animation INTENDED to move. Foot-slide is
+    // capsule delta diverging from this; extracted from the active montage's track range.
+    FVector RootDelta = FVector::ZeroVector;
+    FString MontName;
+    float MontPos = -1.f;
+    if (USkeletalMeshComponent* Mesh = GetMesh())
+    {
+        if (UAnimInstance* AI = Mesh->GetAnimInstance())
+        {
+            if (UAnimMontage* M = AI->GetCurrentActiveMontage())
+            {
+                MontName = M->GetName();
+                MontPos = AI->Montage_GetPosition(M);
+                if (M == PrevMontage && PrevMontagePos >= 0.f && MontPos >= PrevMontagePos)
+                {
+                    const FTransform RM = M->ExtractRootMotionFromTrackRange(PrevMontagePos, MontPos);
+                    RootDelta = RM.GetTranslation();
+                }
+                PrevMontage = M;
+                PrevMontagePos = MontPos;
+            }
+            else
+            {
+                PrevMontage = nullptr;
+                PrevMontagePos = -1.f;
+            }
+        }
+    }
+    R->SetStringField(TEXT("montage"), MontName);
+    R->SetNumberField(TEXT("montPos"), MontPos);
+    R->SetNumberField(TEXT("dRootX"), RootDelta.X);
+    R->SetNumberField(TEXT("dRootY"), RootDelta.Y);
+
+    TraceJson.Add(MakeShared<FJsonValueObject>(R));
+    PrevTraceLoc = Loc;
+    bHavePrevTrace = true;
 }
 
 void UScenarioController::Finish()
@@ -346,6 +413,16 @@ void UScenarioController::Finish()
     TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutStr);
     FJsonSerializer::Serialize(Out.ToSharedRef(), Writer);
     FFileHelper::SaveStringToFile(OutStr, *FPaths::Combine(OutDir, TEXT("observations.json")));
+
+    // Dense per-tick motion trace (analysed for the motion profile + capsule-vs-anim slide).
+    TSharedPtr<FJsonObject> TraceOut = MakeShared<FJsonObject>();
+    TraceOut->SetArrayField(TEXT("trace"), TraceJson);
+    FString TraceStr;
+    TSharedRef<TJsonWriter<>> TWriter = TJsonWriterFactory<>::Create(&TraceStr);
+    FJsonSerializer::Serialize(TraceOut.ToSharedRef(), TWriter);
+    FFileHelper::SaveStringToFile(TraceStr, *FPaths::Combine(OutDir, TEXT("trace.json")));
+
+    // DONE marker written last — the poller waits on it before reading the outputs.
     FFileHelper::SaveStringToFile(TEXT("done"), *FPaths::Combine(OutDir, TEXT("DONE")));
 
     UE_LOG(LogPoFScenario, Display, TEXT("[scenario] FINISH wrote %d samples to %s"),
@@ -374,6 +451,7 @@ void UScenarioController::Tick(float DeltaTime)
 
     ScnTime += DeltaTime;
     ApplyInputs();
+    RecordTrace(DeltaTime);
     while (NextSample < SampleTimes.Num() && ScnTime >= SampleTimes[NextSample])
     {
         DoSample(NextSample);

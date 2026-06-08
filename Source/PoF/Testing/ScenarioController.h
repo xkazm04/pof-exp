@@ -6,6 +6,7 @@
 
 class APawn;
 class USkeletalMeshComponent;
+class UAnimMontage;
 class FJsonObject;
 class FJsonValue;
 
@@ -74,10 +75,20 @@ private:
     TArray<bool> WasActive;  // per-input edge tracking for proper held-key semantics
     TArray<TSharedPtr<FJsonValue>> SamplesJson;
 
+    // Dense per-tick motion trace: capsule movement vs animation root motion, speed, yaw,
+    // active montage + position. Lets movement be analysed as a continuous profile (accel
+    // curves, exact distance/timing) and exposes foot-slide (capsule delta != root delta).
+    TArray<TSharedPtr<FJsonValue>> TraceJson;
+    FVector PrevTraceLoc = FVector::ZeroVector;
+    bool bHavePrevTrace = false;
+    TObjectPtr<UAnimMontage> PrevMontage = nullptr;
+    float PrevMontagePos = -1.f;
+
     bool LoadScenario(const FString& Path);
     void Begin();
     void ApplyInputs();
     void DoSample(int32 Idx);
+    void RecordTrace(float DeltaTime);
     void Finish();
 
     APawn* GetPawn() const;
