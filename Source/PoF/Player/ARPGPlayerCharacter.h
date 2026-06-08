@@ -435,6 +435,10 @@ private:
 	TWeakObjectPtr<AActor> InteractionTarget;
 	float InteractionScanTimer = 0.f;
 
+	// Real-play telemetry accumulator (logs cursor/dodge/speed to PoF.log ~1Hz so movement
+	// issues are diagnosable from a real play session, not just the harness).
+	float PlayTelemetryTimer = 0.f;
+
 	// Ability loadout: SlotIndex (0..N-1) -> AbilityClass. EditDefaultsOnly so the
 	// default hotbar can be authored per-Blueprint (BP_VSPlayer) and set via Python on
 	// the CDO; runtime code reassigns via AssignAbilityToSlot. (No BlueprintReadOnly:

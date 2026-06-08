@@ -107,6 +107,25 @@ void AARPGPlayerCharacter::Tick(float DeltaTime)
 	UpdateCursorAim(DeltaTime);
 	UpdateInteractionScan(DeltaTime);
 	UpdateDebugDisplay(DeltaTime);
+
+	// Low-freq real-play telemetry (readable from Saved/Logs/PoF.log) — bridges the harness's
+	// blind spots: is the REAL OS mouse read succeeding (mouse=NONE => the cursor bug), is the
+	// cursor world point tracking, is the body stuck in a dodge, is it actually moving.
+	PlayTelemetryTimer += DeltaTime;
+	if (PlayTelemetryTimer >= 1.f)
+	{
+		PlayTelemetryTimer = 0.f;
+		float MX = 0.f, MY = 0.f;
+		bool bHasMouse = false;
+		if (APlayerController* PC = Cast<APlayerController>(GetController()))
+		{
+			bHasMouse = PC->GetMousePosition(MX, MY);
+		}
+		UE_LOG(LogTemp, Display, TEXT("[playtel] cursorWorld=%s mouse=%s dodging=%d speed=%.0f"),
+			*CursorWorldLocation.ToCompactString(),
+			bHasMouse ? *FString::Printf(TEXT("%.0f,%.0f"), MX, MY) : TEXT("NONE"),
+			IsDodging() ? 1 : 0, GetVelocity().Size2D());
+	}
 }
 
 // =========================================================================
