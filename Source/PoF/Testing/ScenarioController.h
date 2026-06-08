@@ -94,4 +94,5 @@ private:
     APawn* GetPawn() const;
     USkeletalMeshComponent* GetMesh() const;
     FString CaptureFrame(int32 Idx);
+    FString CaptureView(int32 Idx, const FString& Suffix, const FVector& CamLoc, const FVector& LookAt);
 };

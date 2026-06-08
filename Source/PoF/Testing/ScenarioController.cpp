@@ -315,15 +315,10 @@ void UScenarioController::DoSample(int32 Idx)
     UE_LOG(LogPoFScenario, Display, TEXT("[scenario] sample %d t=%.2f"), Idx, ScnTime);
 }
 
-FString UScenarioController::CaptureFrame(int32 Idx)
+FString UScenarioController::CaptureView(int32 Idx, const FString& Suffix, const FVector& CamLoc, const FVector& LookAt)
 {
     UWorld* W = GetWorld();
-    APawn* P = GetPawn();
-    if (!W || !P || OutDir.IsEmpty()) return FString();
-
-    const FVector PawnLoc = P->GetActorLocation();
-    const FVector LookAt = PawnLoc + FVector(0, 0, 90.f);
-    const FVector CamLoc = PawnLoc + P->GetActorForwardVector() * -320.f + FVector(0, 0, 170.f);
+    if (!W || OutDir.IsEmpty()) return FString();
     const FRotator CamRot = (LookAt - CamLoc).Rotation();
 
     UTextureRenderTarget2D* RT = NewObject<UTextureRenderTarget2D>(W);
@@ -335,20 +330,31 @@ FString UScenarioController::CaptureFrame(int32 Idx)
     if (!Cap) return FString();
     USceneCaptureComponent2D* C = Cap->GetCaptureComponent2D();
     C->TextureTarget = RT;
-    // Base color (unlit albedo) — lighting-independent, so captures are reliably visible even
-    // on sparse/unlit test maps where FinalColorLDR came back near-black. Flat look is fine for
-    // observing pose / floor-line / position.
-    C->CaptureSource = ESceneCaptureSource::SCS_BaseColor;
+    C->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
     C->FOVAngle = 75.f;
     C->bCaptureEveryFrame = false;
     C->bCaptureOnMovement = false;
     C->CaptureScene();
     FlushRenderingCommands();
 
-    const FString Name = FString::Printf(TEXT("frame_%02d.png"), Idx);
+    const FString Name = FString::Printf(TEXT("frame_%02d%s.png"), Idx, *Suffix);
     UKismetRenderingLibrary::ExportRenderTarget(W, RT, OutDir, Name);
     Cap->Destroy();
     return FPaths::Combine(OutDir, Name);
+}
+
+FString UScenarioController::CaptureFrame(int32 Idx)
+{
+    APawn* P = GetPawn();
+    if (!P) return FString();
+    const FVector PawnLoc = P->GetActorLocation();
+    // Chase (behind + above) shows the pose; side (low, level with the floor) shows the floor
+    // line so mesh-into-floor clipping is directly visible.
+    const FVector ChaseLoc = PawnLoc + P->GetActorForwardVector() * -320.f + FVector(0, 0, 170.f);
+    const FVector SideLoc = PawnLoc + P->GetActorRightVector() * 360.f + FVector(0, 0, 70.f);
+    const FString Chase = CaptureView(Idx, TEXT(""), ChaseLoc, PawnLoc + FVector(0, 0, 90.f));
+    CaptureView(Idx, TEXT("_side"), SideLoc, PawnLoc + FVector(0, 0, 50.f));
+    return Chase;
 }
 
 void UScenarioController::RecordTrace(float DeltaTime)
