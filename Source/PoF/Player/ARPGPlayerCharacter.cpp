@@ -642,14 +642,24 @@ void AARPGPlayerCharacter::UpdateCursorAim(float DeltaTime)
 	}
 	else
 	{
-		// Robust top-down aim: deproject the mouse onto a horizontal plane at the
-		// character's height. GetHitResultUnderCursor was fragile here — in a top-down
-		// view the cursor sits over the pawn, so the trace hit the pawn's own capsule
-		// (or missed the floor on the Visibility channel), leaving CursorWorldLocation
-		// stuck and the body unable to track the cursor.
+		// Robust top-down aim: deproject the mouse onto a horizontal plane at the character's
+		// height (GetHitResultUnderCursor was fragile — in a top-down view it hit the pawn's
+		// own capsule). A screen-space override (test seam) feeds the SAME deproject path with
+		// a deterministic input, so the contract suite exercises this real code, not a proxy.
 		float MouseX = 0.f, MouseY = 0.f;
+		bool bHaveScreen;
+		if (bUseCursorScreenOverride)
+		{
+			MouseX = CursorScreenOverride.X;
+			MouseY = CursorScreenOverride.Y;
+			bHaveScreen = true;
+		}
+		else
+		{
+			bHaveScreen = PC->GetMousePosition(MouseX, MouseY);
+		}
 		FVector WorldOrigin, WorldDir;
-		if (PC->GetMousePosition(MouseX, MouseY) &&
+		if (bHaveScreen &&
 			PC->DeprojectScreenPositionToWorld(MouseX, MouseY, WorldOrigin, WorldDir) &&
 			!FMath::IsNearlyZero(WorldDir.Z))
 		{

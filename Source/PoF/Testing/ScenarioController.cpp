@@ -216,6 +216,21 @@ void UScenarioController::ApplyInputs()
                 }
             }
         }
+        // Screen-space mouse position -> exercises the player's REAL deproject cursor-aim path
+        // (not the world-override proxy), so the contract suite catches real-mouse regressions.
+        if (In.Event == TEXT("set_mouse") && bNow && !bWas)
+        {
+            TArray<FString> Parts;
+            In.EventArg.ParseIntoArray(Parts, TEXT(","));
+            if (Parts.Num() >= 2)
+            {
+                if (AARPGPlayerCharacter* Player = Cast<AARPGPlayerCharacter>(PC->GetPawn()))
+                {
+                    Player->SetCursorScreenOverride(FVector2D(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1])));
+                    UE_LOG(LogPoFScenario, Display, TEXT("[scenario] set_mouse %s"), *In.EventArg);
+                }
+            }
+        }
         if (WasActive.IsValidIndex(i)) WasActive[i] = bNow;
     }
 }
@@ -320,14 +335,11 @@ FString UScenarioController::CaptureFrame(int32 Idx)
     if (!Cap) return FString();
     USceneCaptureComponent2D* C = Cap->GetCaptureComponent2D();
     C->TextureTarget = RT;
-    C->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+    // Base color (unlit albedo) — lighting-independent, so captures are reliably visible even
+    // on sparse/unlit test maps where FinalColorLDR came back near-black. Flat look is fine for
+    // observing pose / floor-line / position.
+    C->CaptureSource = ESceneCaptureSource::SCS_BaseColor;
     C->FOVAngle = 75.f;
-    // Deterministic exposure so sparse/dark test maps still render visibly (capture was
-    // coming back near-black under auto-exposure regardless of added lights).
-    C->PostProcessSettings.bOverride_AutoExposureMethod = true;
-    C->PostProcessSettings.AutoExposureMethod = AEM_Manual;
-    C->PostProcessSettings.bOverride_AutoExposureBias = true;
-    C->PostProcessSettings.AutoExposureBias = 10.0f;
     C->bCaptureEveryFrame = false;
     C->bCaptureOnMovement = false;
     C->CaptureScene();
@@ -352,6 +364,7 @@ void UScenarioController::RecordTrace(float DeltaTime)
     R->SetNumberField(TEXT("dt"), DeltaTime);
     R->SetNumberField(TEXT("x"), Loc.X);
     R->SetNumberField(TEXT("y"), Loc.Y);
+    R->SetNumberField(TEXT("z"), Loc.Z);
     R->SetNumberField(TEXT("vx"), Vel.X);
     R->SetNumberField(TEXT("vy"), Vel.Y);
     R->SetNumberField(TEXT("speed"), Vel.Size2D());
@@ -369,6 +382,8 @@ void UScenarioController::RecordTrace(float DeltaTime)
     float MontPos = -1.f;
     if (USkeletalMeshComponent* Mesh = GetMesh())
     {
+        // Lowest world-Z of the mesh bounds — floor-penetration = this dipping below the floor.
+        R->SetNumberField(TEXT("meshMinZ"), Mesh->Bounds.GetBox().Min.Z);
         if (UAnimInstance* AI = Mesh->GetAnimInstance())
         {
             if (UAnimMontage* M = AI->GetCurrentActiveMontage())

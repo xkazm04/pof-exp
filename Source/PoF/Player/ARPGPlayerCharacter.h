@@ -255,6 +255,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera|Cursor")
 	void ClearCursorWorldOverride() { bUseCursorWorldOverride = false; }
 
+	/** TEST SEAM: feed a SCREEN-space cursor position (pixels) so UpdateCursorAim runs its
+	 *  REAL deproject path (DeprojectScreenPositionToWorld + ground-plane intersect) with a
+	 *  deterministic input. Unlike SetCursorWorldOverride (which skips deproject), this
+	 *  exercises the actual mouse-aim code — so the contract suite can catch real-path
+	 *  regressions instead of a proxy passing while real play is broken. */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Cursor")
+	void SetCursorScreenOverride(FVector2D ScreenPos) { CursorScreenOverride = ScreenPos; bUseCursorScreenOverride = true; }
+
+	UFUNCTION(BlueprintCallable, Category = "Camera|Cursor")
+	void ClearCursorScreenOverride() { bUseCursorScreenOverride = false; }
+
 	// =====================================================================
 	// Delegates — bind from HUD/widgets
 	// =====================================================================
@@ -415,6 +426,10 @@ private:
 	// Cursor aim override (test/AI seam — see SetCursorWorldOverride)
 	bool bUseCursorWorldOverride = false;
 	FVector CursorWorldOverride = FVector::ZeroVector;
+
+	// Screen-space cursor override (test seam — exercises the REAL deproject path)
+	bool bUseCursorScreenOverride = false;
+	FVector2D CursorScreenOverride = FVector2D::ZeroVector;
 
 	// Interaction scan
 	TWeakObjectPtr<AActor> InteractionTarget;
