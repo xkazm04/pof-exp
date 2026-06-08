@@ -469,7 +469,8 @@ void AARPGCharacterBase::OnDodgeEnd()
 	{
 		MoveComp->SetMovementMode(MOVE_Walking);
 		MoveComp->bOrientRotationToMovement = bDodgePrevOrientToMovement;
-		MoveComp->Velocity = FVector::ZeroVector;
+		// Don't hard-zero velocity — carry momentum into locomotion so the roll exit
+		// glides/decelerates instead of a 1-frame dead stop (552 u/s -> 0 read as a jolt).
 	}
 
 	// End invulnerability if still active (safety net)
