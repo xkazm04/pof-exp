@@ -140,10 +140,9 @@ void UGA_Dodge::ActivateAbility(
 	// Snap rotation to dodge direction
 	Character->SetActorRotation(DodgeDir.Rotation());
 
-	// Drive the actual lunge. AM_Roll has no usable root motion, so the montage is visual
-	// only — this controlled velocity lunge (DodgeDistance over DodgeDuration, ease-out)
-	// gives the dodge real distance/speed and gates movement until it ends.
-	Character->StartDodgeLunge(DodgeDir);
+	// Enter the dodge state. AM_Roll's root motion (now enabled) drives the travel, so the
+	// capsule follows the animation exactly (no foot-slide) — we just flag the state here.
+	Character->BeginDodge();
 
 	// Select the montage for this direction (uses character's assigned montages)
 	UAnimMontage* Montage = Character->GetDodgeMontageForDirection(ResolvedDirection);
@@ -183,10 +182,10 @@ void UGA_Dodge::EndAbility(
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
-	// Broadcast dodge ended delegate for VFX/SFX
+	// Clear the dodge state (restores movement/facing) — also broadcasts OnDodgeEnded.
 	if (AARPGCharacterBase* Character = GetARPGCharacter())
 	{
-		Character->OnDodgeEnded.Broadcast();
+		Character->EndDodge();
 	}
 
 	// State.Invulnerable tag is automatically removed by GAS when EndAbility runs

@@ -133,12 +133,15 @@ public:
 	bool TryDodge(const FVector2D& MoveInput);
 
 	/**
-	 * Drive a controlled dodge LUNGE in a world direction — the velocity-based displacement
-	 * used by UpdateDodgeMovement (DodgeDistance over DodgeDuration, ease-out, wall-sliding).
-	 * Stamina/cooldown/invulnerability are owned by the caller (e.g. GA_Dodge); this only sets
-	 * up the lunge motion + movement gating. OnDodgeEnd restores walking after DodgeDuration.
+	 * Enter the dodge state for a ROOT-MOTION-driven roll. AM_Roll's (now-enabled) root motion
+	 * moves the capsule exactly as the animation does — so this only flags bIsDodging (gates
+	 * voluntary movement + cursor-aim) and holds facing. The ability snaps facing + plays the
+	 * montage; call EndDodge() when the montage finishes.
 	 */
-	void StartDodgeLunge(const FVector& WorldDir);
+	void BeginDodge();
+
+	/** Leave the dodge state — clears bIsDodging and restores movement/facing. */
+	void EndDodge();
 
 	UFUNCTION(BlueprintPure, Category = "Movement|Dodge")
 	bool IsDodging() const { return bIsDodging; }

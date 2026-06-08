@@ -482,36 +482,26 @@ void AARPGCharacterBase::OnDodgeEnd()
 	OnDodgeEnded.Broadcast();
 }
 
-void AARPGCharacterBase::StartDodgeLunge(const FVector& WorldDir)
+void AARPGCharacterBase::BeginDodge()
 {
-	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
-	if (!MoveComp || bIsDodging) return;
-
-	FVector Dir(WorldDir.X, WorldDir.Y, 0.f);
-	Dir = Dir.GetSafeNormal();
-	if (Dir.IsNearlyZero())
-	{
-		Dir = GetActorForwardVector();
-		Dir.Z = 0.f;
-		Dir = Dir.GetSafeNormal();
-	}
-
+	if (bIsDodging) return;
 	bIsDodging = true;
 	bInDodgeCancelWindow = false;
 	DodgeElapsedTime = 0.f;
-	DodgeWorldDir = Dir;
-	DodgeSpeed = DodgeDistance / FMath::Max(DodgeDuration, 0.01f);
 
-	// Custom movement mode lets UpdateDodgeMovement drive a controlled ease-out lunge
-	// (no slope/friction interference). Remember the prior orient setting so OnDodgeEnd
-	// restores it — the mouse-aim player runs with orient-to-movement OFF.
-	bDodgePrevOrientToMovement = MoveComp->bOrientRotationToMovement;
-	MoveComp->SetMovementMode(MOVE_Custom, EARPGCustomMovement::Dodge);
-	MoveComp->bOrientRotationToMovement = false;
+	// Root motion (RootMotionFromMontagesOnly) drives the roll's travel, so we stay in
+	// MOVE_Walking and add NO velocity — that keeps the capsule locked to the animation
+	// (no foot-slide). Just hold facing; OnDodgeEnd (via EndDodge) restores it.
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		bDodgePrevOrientToMovement = MoveComp->bOrientRotationToMovement;
+		MoveComp->bOrientRotationToMovement = false;
+	}
+}
 
-	// Reset the lunge after DodgeDuration (OnDodgeEnd restores walking + facing).
-	GetWorldTimerManager().SetTimer(DodgeEndTimerHandle, this,
-		&AARPGCharacterBase::OnDodgeEnd, DodgeDuration, false);
+void AARPGCharacterBase::EndDodge()
+{
+	OnDodgeEnd();
 }
 
 // =========================================================================
