@@ -642,10 +642,23 @@ void AARPGPlayerCharacter::UpdateCursorAim(float DeltaTime)
 	}
 	else
 	{
-		FHitResult HitResult;
-		if (PC->GetHitResultUnderCursor(ECC_Visibility, false, HitResult))
+		// Robust top-down aim: deproject the mouse onto a horizontal plane at the
+		// character's height. GetHitResultUnderCursor was fragile here — in a top-down
+		// view the cursor sits over the pawn, so the trace hit the pawn's own capsule
+		// (or missed the floor on the Visibility channel), leaving CursorWorldLocation
+		// stuck and the body unable to track the cursor.
+		float MouseX = 0.f, MouseY = 0.f;
+		FVector WorldOrigin, WorldDir;
+		if (PC->GetMousePosition(MouseX, MouseY) &&
+			PC->DeprojectScreenPositionToWorld(MouseX, MouseY, WorldOrigin, WorldDir) &&
+			!FMath::IsNearlyZero(WorldDir.Z))
 		{
-			CursorWorldLocation = HitResult.ImpactPoint;
+			const float PlaneZ = GetActorLocation().Z;
+			const float T = (PlaneZ - WorldOrigin.Z) / WorldDir.Z;
+			if (T > 0.f)
+			{
+				CursorWorldLocation = WorldOrigin + WorldDir * T;
+			}
 		}
 	}
 
