@@ -2,6 +2,7 @@
 #include "AbilitySystem/ARPGGameplayTags.h"
 #include "AbilitySystem/Effects/GE_DodgeCooldown.h"
 #include "Character/ARPGCharacterBase.h"
+#include "Player/ARPGPlayerCharacter.h"
 #include "AbilitySystemComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
@@ -99,9 +100,22 @@ void UGA_Dodge::ActivateAbility(
 	{
 		DodgeDir = FVector(LastInput.X, LastInput.Y, 0.f).GetSafeNormal();
 	}
+	else if (const AARPGPlayerCharacter* Player = Cast<AARPGPlayerCharacter>(Character))
+	{
+		// Stationary player — dodge toward the cursor aim point.
+		FVector ToCursor = Player->GetCursorWorldLocation() - Player->GetActorLocation();
+		ToCursor.Z = 0.f;
+		DodgeDir = ToCursor.GetSafeNormal();
+		if (DodgeDir.IsNearlyZero())
+		{
+			DodgeDir = Player->GetActorForwardVector();
+			DodgeDir.Z = 0.f;
+			DodgeDir = DodgeDir.GetSafeNormal();
+		}
+	}
 	else
 	{
-		// No input — dodge backward relative to character facing
+		// Non-player (AI) — dodge backward relative to facing.
 		DodgeDir = -Character->GetActorForwardVector();
 		DodgeDir.Z = 0.f;
 		DodgeDir = DodgeDir.GetSafeNormal();
@@ -126,6 +140,11 @@ void UGA_Dodge::ActivateAbility(
 	// Snap rotation to dodge direction
 	Character->SetActorRotation(DodgeDir.Rotation());
 
+	// Drive the actual lunge. AM_Roll has no usable root motion, so the montage is visual
+	// only — this controlled velocity lunge (DodgeDistance over DodgeDuration, ease-out)
+	// gives the dodge real distance/speed and gates movement until it ends.
+	Character->StartDodgeLunge(DodgeDir);
+
 	// Select the montage for this direction (uses character's assigned montages)
 	UAnimMontage* Montage = Character->GetDodgeMontageForDirection(ResolvedDirection);
 
@@ -144,7 +163,7 @@ void UGA_Dodge::ActivateAbility(
 		this,
 		TEXT("PlayDodge"),
 		Montage,
-		MontagePlayRate,
+		Character->GetDodgeMontagePlayRate(),
 		NAME_None,
 		/*bStopWhenAbilityEnds=*/ true);
 

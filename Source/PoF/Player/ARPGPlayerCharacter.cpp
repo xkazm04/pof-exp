@@ -665,6 +665,9 @@ void AARPGPlayerCharacter::UpdateCursorAim(float DeltaTime)
 	// Rotate character toward cursor only when cursor aim is active
 	if (!bCursorAimActive) return;
 
+	// Don't fight the dodge lunge — hold the roll's facing while dodging.
+	if (IsDodging()) return;
+
 	FVector Direction = CursorWorldLocation - GetActorLocation();
 	Direction.Z = 0.f;
 

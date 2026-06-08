@@ -356,6 +356,7 @@ bool AARPGCharacterBase::TryDodge(const FVector2D& MoveInput)
 	// external forces, and gives us full control over dodge velocity
 	if (MoveComp)
 	{
+		bDodgePrevOrientToMovement = MoveComp->bOrientRotationToMovement;
 		MoveComp->SetMovementMode(MOVE_Custom, EARPGCustomMovement::Dodge);
 		// Disable orientation to movement during dodge so we hold our facing
 		MoveComp->bOrientRotationToMovement = false;
@@ -467,7 +468,7 @@ void AARPGCharacterBase::OnDodgeEnd()
 	if (MoveComp)
 	{
 		MoveComp->SetMovementMode(MOVE_Walking);
-		MoveComp->bOrientRotationToMovement = true;
+		MoveComp->bOrientRotationToMovement = bDodgePrevOrientToMovement;
 		MoveComp->Velocity = FVector::ZeroVector;
 	}
 
@@ -479,6 +480,38 @@ void AARPGCharacterBase::OnDodgeEnd()
 	GetWorldTimerManager().ClearTimer(InvulnerabilityEndTimerHandle);
 
 	OnDodgeEnded.Broadcast();
+}
+
+void AARPGCharacterBase::StartDodgeLunge(const FVector& WorldDir)
+{
+	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+	if (!MoveComp || bIsDodging) return;
+
+	FVector Dir(WorldDir.X, WorldDir.Y, 0.f);
+	Dir = Dir.GetSafeNormal();
+	if (Dir.IsNearlyZero())
+	{
+		Dir = GetActorForwardVector();
+		Dir.Z = 0.f;
+		Dir = Dir.GetSafeNormal();
+	}
+
+	bIsDodging = true;
+	bInDodgeCancelWindow = false;
+	DodgeElapsedTime = 0.f;
+	DodgeWorldDir = Dir;
+	DodgeSpeed = DodgeDistance / FMath::Max(DodgeDuration, 0.01f);
+
+	// Custom movement mode lets UpdateDodgeMovement drive a controlled ease-out lunge
+	// (no slope/friction interference). Remember the prior orient setting so OnDodgeEnd
+	// restores it — the mouse-aim player runs with orient-to-movement OFF.
+	bDodgePrevOrientToMovement = MoveComp->bOrientRotationToMovement;
+	MoveComp->SetMovementMode(MOVE_Custom, EARPGCustomMovement::Dodge);
+	MoveComp->bOrientRotationToMovement = false;
+
+	// Reset the lunge after DodgeDuration (OnDodgeEnd restores walking + facing).
+	GetWorldTimerManager().SetTimer(DodgeEndTimerHandle, this,
+		&AARPGCharacterBase::OnDodgeEnd, DodgeDuration, false);
 }
 
 // =========================================================================

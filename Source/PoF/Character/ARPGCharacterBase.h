@@ -132,6 +132,14 @@ public:
 	 */
 	bool TryDodge(const FVector2D& MoveInput);
 
+	/**
+	 * Drive a controlled dodge LUNGE in a world direction — the velocity-based displacement
+	 * used by UpdateDodgeMovement (DodgeDistance over DodgeDuration, ease-out, wall-sliding).
+	 * Stamina/cooldown/invulnerability are owned by the caller (e.g. GA_Dodge); this only sets
+	 * up the lunge motion + movement gating. OnDodgeEnd restores walking after DodgeDuration.
+	 */
+	void StartDodgeLunge(const FVector& WorldDir);
+
 	UFUNCTION(BlueprintPure, Category = "Movement|Dodge")
 	bool IsDodging() const { return bIsDodging; }
 
@@ -703,6 +711,9 @@ private:
 
 	// --- Dodge state ---
 	bool bIsDodging = false;
+	/** bOrientRotationToMovement value captured at dodge start, restored by OnDodgeEnd
+	 *  (so the mouse-aim player keeps orient-to-movement OFF after a dodge). */
+	bool bDodgePrevOrientToMovement = true;
 	bool bIsInvulnerable = false;
 	bool bInDodgeCancelWindow = false;
 	float DodgeCooldownRemaining = 0.f;
