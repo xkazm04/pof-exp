@@ -10,6 +10,7 @@
 #include "Engine/CurveTable.h"
 #include "MotionWarpingComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -103,6 +104,12 @@ AARPGCharacterBase::AARPGCharacterBase()
 	// subobject of this actor (the ASC's owner), UAbilitySystemComponent::InitializeComponent
 	// auto-discovers and registers it — no manual AddSpawnedAttribute needed at runtime.
 	AttributeSet = CreateDefaultSubobject<UARPGAttributeSet>(TEXT("AttributeSet"));
+
+	// --- Weapon (visual mesh; hits come from the HitDetection notify's socket traces) ---
+	WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
+	WeaponMesh->SetupAttachment(GetMesh(), WeaponAttachBone);
+	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WeaponMesh->SetGenerateOverlapEvents(false);
 }
 
 UAbilitySystemComponent* AARPGCharacterBase::GetAbilitySystemComponent() const
@@ -163,6 +170,18 @@ void AARPGCharacterBase::BeginPlay()
 	{
 		AActor* OwnerActor = GetController() ? static_cast<AActor*>(GetController()) : static_cast<AActor*>(this);
 		AbilitySystemComponent->InitAbilityActorInfo(OwnerActor, this);
+	}
+
+	// Re-attach the weapon with the (possibly per-Blueprint-edited) bone. KeepRelative —
+	// Snap rules ZERO the relative transform, stomping the grip rotation authored on the
+	// component template. WeaponGripOffset only overrides when explicitly set (non-identity).
+	if (WeaponMesh && GetMesh())
+	{
+		WeaponMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, WeaponAttachBone);
+		if (!WeaponGripOffset.Equals(FTransform::Identity))
+		{
+			WeaponMesh->SetRelativeTransform(WeaponGripOffset);
+		}
 	}
 }
 

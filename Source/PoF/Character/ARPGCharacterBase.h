@@ -13,6 +13,7 @@ class UCurveFloat;
 class UCurveTable;
 class UDataTable;
 class UMotionWarpingComponent;
+class UStaticMeshComponent;
 
 /** Dodge direction relative to character facing. */
 UENUM(BlueprintType)
@@ -183,6 +184,27 @@ public:
 	/** Called by anim notify state to disable weapon hit detection. */
 	UFUNCTION(BlueprintCallable, Category = "Combat|HitDetection")
 	void DisableHitDetection() { bHitDetectionActive = false; }
+
+	// =====================================================================
+	// Weapon
+	// =====================================================================
+
+	/** Visual weapon mesh attached to the character mesh's hand bone. NoCollision —
+	 *  melee hits come from AnimNotifyState_HitDetection tracing its Base/Tip sockets. */
+	UFUNCTION(BlueprintPure, Category = "Combat|Weapon")
+	UStaticMeshComponent* GetWeaponMesh() const { return WeaponMesh; }
+
+	/** Weapon mesh component (assign the StaticMesh per-Blueprint, e.g. SM_RuneSword). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|Weapon")
+	TObjectPtr<UStaticMeshComponent> WeaponMesh;
+
+	/** Bone/socket on the character mesh the weapon attaches to. */
+	UPROPERTY(EditAnywhere, Category = "Combat|Weapon")
+	FName WeaponAttachBone = TEXT("hand_r");
+
+	/** Grip offset relative to the attach bone — tuned per weapon so the hand wraps the hilt. */
+	UPROPERTY(EditAnywhere, Category = "Combat|Weapon")
+	FTransform WeaponGripOffset;
 
 	// =====================================================================
 	// Motion Warping

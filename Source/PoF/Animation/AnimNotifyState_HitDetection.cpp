@@ -1,5 +1,6 @@
 #include "Animation/AnimNotifyState_HitDetection.h"
 #include "Character/ARPGCharacterBase.h"
+#include "Components/StaticMeshComponent.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystem/ARPGGameplayTags.h"
@@ -48,9 +49,26 @@ void UAnimNotifyState_HitDetection::NotifyTick(USkeletalMeshComponent* MeshComp,
 
 	if (TipSocketName != NAME_None)
 	{
+		// Prefer the owner's weapon-mesh sockets — a sword's Base/Tip live on the weapon
+		// STATIC mesh (authored at asset-gen time), not the character skeleton. Fall back
+		// to skeleton sockets/bones so skeleton-socket setups keep working.
+		const UStaticMeshComponent* Weapon = nullptr;
+		if (const AARPGCharacterBase* WeaponOwner = Cast<AARPGCharacterBase>(OwnerActor))
+		{
+			Weapon = WeaponOwner->GetWeaponMesh();
+		}
+		auto SocketPos = [&](const FName& SocketName) -> FVector
+		{
+			if (Weapon && Weapon->GetStaticMesh() && Weapon->DoesSocketExist(SocketName))
+			{
+				return Weapon->GetSocketLocation(SocketName);
+			}
+			return MeshComp->GetSocketLocation(SocketName);
+		};
+
 		// Multi-point mode: trace along the weapon from base to tip
-		const FVector BasePos = MeshComp->GetSocketLocation(WeaponSocketName);
-		const FVector TipPos = MeshComp->GetSocketLocation(TipSocketName);
+		const FVector BasePos = SocketPos(WeaponSocketName);
+		const FVector TipPos = SocketPos(TipSocketName);
 
 		if (bHasPreviousLocations)
 		{
