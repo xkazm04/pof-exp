@@ -14,6 +14,8 @@
 #include "Engine/SceneCapture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
+#include "UnrealClient.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Player/ARPGPlayerCharacter.h"
@@ -105,6 +107,38 @@ bool UScenarioController::LoadScenario(const FString& Path)
             Inputs.Add(In);
         }
     }
+
+    // Deterministic-capture config (all optional; absent => behavior unchanged).
+    const TArray<TSharedPtr<FJsonValue>>* StrArr = nullptr;
+    if (Root->TryGetArrayField(TEXT("remove_actor_classes"), StrArr))
+    {
+        for (const TSharedPtr<FJsonValue>& V : *StrArr)
+        {
+            RemoveActorClasses.Add(V->AsString());
+        }
+    }
+    const TArray<TSharedPtr<FJsonValue>>* PosArr = nullptr;
+    if (Root->TryGetArrayField(TEXT("det_capture_positions"), PosArr))
+    {
+        for (const TSharedPtr<FJsonValue>& V : *PosArr)
+        {
+            DetCapturePositions.Add((float)V->AsNumber());
+        }
+        DetCapturePositions.Sort();
+    }
+    auto ParseVec = [](const FString& S, FVector& Out) -> bool
+    {
+        TArray<FString> Parts;
+        S.ParseIntoArray(Parts, TEXT(","));
+        if (Parts.Num() < 3) return false;
+        Out = FVector(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]), FCString::Atof(*Parts[2]));
+        return true;
+    };
+    FString CamS, LookS;
+    if (Root->TryGetStringField(TEXT("det_cam"), CamS) && Root->TryGetStringField(TEXT("det_lookat"), LookS))
+    {
+        bHaveDetCam = ParseVec(CamS, DetCamLoc) && ParseVec(LookS, DetLookAt);
+    }
     return !OutDir.IsEmpty();
 }
 
@@ -129,11 +163,34 @@ USkeletalMeshComponent* UScenarioController::GetMesh() const
     return nullptr;
 }
 
+void UScenarioController::RemoveNoiseActors()
+{
+    // Destroy configured actor classes in the PIE world only — transient, the saved map is
+    // untouched (level-edit duplication crashed the headless editor; this avoids it entirely).
+    UWorld* W = GetWorld();
+    if (!W || RemoveActorClasses.IsEmpty()) return;
+    TArray<AActor*> ToKill;
+    for (TActorIterator<AActor> It(W); It; ++It)
+    {
+        if (RemoveActorClasses.Contains(It->GetClass()->GetName()))
+        {
+            ToKill.Add(*It);
+        }
+    }
+    for (AActor* A : ToKill)
+    {
+        UE_LOG(LogPoFScenario, Display, TEXT("[scenario] removing noise actor %s (%s)"),
+            *A->GetActorLabel(), *A->GetClass()->GetName());
+        A->Destroy();
+    }
+}
+
 void UScenarioController::Begin()
 {
     bStarted = true;
     ScnTime = 0.f;
     WasActive.Init(false, Inputs.Num());
+    RemoveNoiseActors();
     if (!PlayAnim.IsEmpty())
     {
         if (USkeletalMeshComponent* Mesh = GetMesh())
@@ -311,6 +368,7 @@ void UScenarioController::DoSample(int32 Idx)
     }
     S->SetBoolField(TEXT("pose_valid"), bPoseValid);
     S->SetStringField(TEXT("frame"), CaptureFrame(Idx));
+    CaptureViewport(Idx);
     SamplesJson.Add(MakeShared<FJsonValueObject>(S));
     UE_LOG(LogPoFScenario, Display, TEXT("[scenario] sample %d t=%.2f"), Idx, ScnTime);
 }
@@ -357,6 +415,17 @@ FString UScenarioController::CaptureFrame(int32 Idx)
     return Chase;
 }
 
+void UScenarioController::CaptureViewport(int32 Idx)
+{
+    if (OutDir.IsEmpty()) return;
+    // The REAL game viewport: the player camera + full lit post-process pipeline — the floor and
+    // world render exactly as they do in play (SceneCapture2D rendered them black/edge-on). The
+    // request is serviced at end-of-frame, so the PNG appears ~1 tick later (well before DONE).
+    const FString Path = FPaths::Combine(OutDir, FString::Printf(TEXT("shot_%02d.png"), Idx));
+    FScreenshotRequest::RequestScreenshot(Path, /*bShowUI=*/false, /*bAddFilenameSuffix=*/false);
+    UE_LOG(LogPoFScenario, Display, TEXT("[scenario] viewport screenshot requested -> %s"), *Path);
+}
+
 void UScenarioController::RecordTrace(float DeltaTime)
 {
     APawn* P = GetPawn();
@@ -390,6 +459,14 @@ void UScenarioController::RecordTrace(float DeltaTime)
     {
         // Lowest world-Z of the mesh bounds — floor-penetration = this dipping below the floor.
         R->SetNumberField(TEXT("meshMinZ"), Mesh->Bounds.GetBox().Min.Z);
+        // Mesh-lift ground truth: the live relative-Z (did the visual lift APPLY) and the pawn's
+        // actual configured lift (did the CDO tune REACH the spawned instance) — separates
+        // config-propagation failures from logic failures without guessing.
+        R->SetNumberField(TEXT("meshRelZ"), Mesh->GetRelativeLocation().Z);
+        if (FFloatProperty* LiftProp = FindFProperty<FFloatProperty>(P->GetClass(), TEXT("DodgeMeshLift")))
+        {
+            R->SetNumberField(TEXT("liftCfg"), LiftProp->GetPropertyValue_InContainer(P));
+        }
         if (UAnimInstance* AI = Mesh->GetAnimInstance())
         {
             if (UAnimMontage* M = AI->GetCurrentActiveMontage())
@@ -403,6 +480,19 @@ void UScenarioController::RecordTrace(float DeltaTime)
                 }
                 PrevMontage = M;
                 PrevMontagePos = MontPos;
+
+                // Deterministic captures: fire when the MONTAGE POSITION crosses each mark.
+                // Pose + root-motion location are functions of montage position (not wall-clock),
+                // and the camera is a fixed world pose -> frames are reproducible run-to-run.
+                while (bHaveDetCam && NextDetCapture < DetCapturePositions.Num()
+                    && MontPos >= DetCapturePositions[NextDetCapture])
+                {
+                    Mesh->RefreshBoneTransforms();
+                    const FString Png = CaptureView(NextDetCapture, TEXT("_det"), DetCamLoc, DetLookAt);
+                    UE_LOG(LogPoFScenario, Display, TEXT("[scenario] det capture %d at montPos=%.3f -> %s"),
+                        NextDetCapture, MontPos, *Png);
+                    ++NextDetCapture;
+                }
             }
             else
             {

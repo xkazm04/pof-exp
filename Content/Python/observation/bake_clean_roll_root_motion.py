@@ -8,6 +8,8 @@ args:{asset:"/Game/Mixamo/Retargeted/SKM_Manny/Forward_Roll_RT"}}.
 
 Reports each step so a failure pinpoints exactly which anim-data API gives out.
 """
+import math
+
 import unreal
 
 
@@ -47,10 +49,16 @@ def run(args):
     positions, rotations, scales = [], [], []
     ident = unreal.Quat(0, 0, 0, 1)
     one = unreal.Vector(1, 1, 1)
+    # Optional vertical arc: raise the whole roll mid-flight (feet are tucked there) so the
+    # skinned mesh clears the floor, settling to 0 at both ends (no start/end float).
+    lift = float(args.get("lift", 0.0))
     keys = n + 1  # UE bone tracks are usually frames+1 keys
+    out["lift"] = lift
     for i in range(keys):
-        a = _smootherstep(i / max(1, keys - 1))
-        positions.append(unreal.Vector(fwd.x * dist * a, fwd.y * dist * a, 0.0))
+        p = i / max(1, keys - 1)
+        a = _smootherstep(p)
+        z = lift * math.sin(math.pi * p)  # 0 -> peak at mid -> 0
+        positions.append(unreal.Vector(fwd.x * dist * a, fwd.y * dist * a, z))
         rotations.append(ident)
         scales.append(one)
 

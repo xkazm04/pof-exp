@@ -84,15 +84,31 @@ private:
     TObjectPtr<UAnimMontage> PrevMontage = nullptr;
     float PrevMontagePos = -1.f;
 
+    // Deterministic visual-gate capture: frames keyed to MONTAGE POSITION (not wall-clock) from
+    // a FIXED world-space camera, with configured noise actors destroyed at Begin. This is the
+    // pixel-stable capture the golden-image diff needs — wall-clock live frames varied
+    // 2.7-46% run-to-run (roll-phase sampling + pawn-relative camera parallax + roaming enemy).
+    TArray<FString> RemoveActorClasses;   // class names destroyed in the PIE world at Begin
+    TArray<float> DetCapturePositions;    // montage positions (s), fired once each when crossed
+    int32 NextDetCapture = 0;
+    FVector DetCamLoc = FVector::ZeroVector;
+    FVector DetLookAt = FVector::ZeroVector;
+    bool bHaveDetCam = false;
+
     bool LoadScenario(const FString& Path);
     void Begin();
     void ApplyInputs();
     void DoSample(int32 Idx);
     void RecordTrace(float DeltaTime);
+    void RemoveNoiseActors();
     void Finish();
 
     APawn* GetPawn() const;
     USkeletalMeshComponent* GetMesh() const;
     FString CaptureFrame(int32 Idx);
     FString CaptureView(int32 Idx, const FString& Suffix, const FVector& CamLoc, const FVector& LookAt);
+    // Capture the REAL game viewport (player camera, full lit pipeline incl. the floor) via a
+    // screenshot request — the ground-truth view SceneCapture2D can't give (it rendered black/
+    // edge-on). Async: the PNG lands ~1 frame later in OutDir as shot_NN.png.
+    void CaptureViewport(int32 Idx);
 };

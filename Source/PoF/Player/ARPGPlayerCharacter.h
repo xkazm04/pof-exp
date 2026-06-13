@@ -417,6 +417,16 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Cursor")
 	float CursorAimRotationSpeed = 15.f;
 
+	/** Upward mesh lift (cm) during a dodge roll so the rolling skinned mesh clears the floor
+	 *  (the capsule stays grounded — only the visual mesh lifts, blended in/out). Dial by eye:
+	 *  the skin-vs-floor clip can't be measured or captured automatically. 0 = off. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Dodge")
+	float DodgeMeshLift = 25.f;
+
+	/** Blend speed for the dodge mesh lift (higher = snappier in/out). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Dodge")
+	float DodgeMeshLiftSpeed = 10.f;
+
 private:
 	bool bIsAlive = true;
 
@@ -438,6 +448,12 @@ private:
 	// Real-play telemetry accumulator (logs cursor/dodge/speed to PoF.log ~1Hz so movement
 	// issues are diagnosable from a real play session, not just the harness).
 	float PlayTelemetryTimer = 0.f;
+
+	// Dodge mesh-lift runtime state (see DodgeMeshLift). The base Z is the mesh's default
+	// relative height (captured on first tick); CurLift is the smoothed current offset.
+	float DodgeMeshBaseZ = 0.f;
+	float DodgeMeshCurLift = 0.f;
+	bool bDodgeMeshBaseCaptured = false;
 
 	// Ability loadout: SlotIndex (0..N-1) -> AbilityClass. EditDefaultsOnly so the
 	// default hotbar can be authored per-Blueprint (BP_VSPlayer) and set via Python on

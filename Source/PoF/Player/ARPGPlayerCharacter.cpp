@@ -108,6 +108,23 @@ void AARPGPlayerCharacter::Tick(float DeltaTime)
 	UpdateInteractionScan(DeltaTime);
 	UpdateDebugDisplay(DeltaTime);
 
+	// Dodge mesh lift: raise the VISUAL mesh during a roll so the skinned surface clears the
+	// floor (the capsule stays grounded — gameplay/collision unchanged). Amount is dialed by
+	// eye via DodgeMeshLift: the skin-vs-floor clip can't be measured or captured automatically,
+	// so this is the live knob that lets a human close it without a code change.
+	if (USkeletalMeshComponent* LiftMesh = GetMesh())
+	{
+		if (!bDodgeMeshBaseCaptured)
+		{
+			DodgeMeshBaseZ = LiftMesh->GetRelativeLocation().Z;
+			bDodgeMeshBaseCaptured = true;
+		}
+		const float LiftTarget = IsDodging() ? DodgeMeshLift : 0.f;
+		DodgeMeshCurLift = FMath::FInterpTo(DodgeMeshCurLift, LiftTarget, DeltaTime, DodgeMeshLiftSpeed);
+		const FVector LiftRL = LiftMesh->GetRelativeLocation();
+		LiftMesh->SetRelativeLocation(FVector(LiftRL.X, LiftRL.Y, DodgeMeshBaseZ + DodgeMeshCurLift));
+	}
+
 	// Low-freq real-play telemetry (readable from Saved/Logs/PoF.log) — bridges the harness's
 	// blind spots: is the REAL OS mouse read succeeding (mouse=NONE => the cursor bug), is the
 	// cursor world point tracking, is the body stuck in a dodge, is it actually moving.

@@ -20,6 +20,13 @@ def run(args):
     if floor:
         floor.set_actor_scale3d(unreal.Vector(400, 400, 1))
         out["spawned"].append("floor")
+        # Unlit emissive floor so SceneCapture shows the floor line (it crushed to black before),
+        # letting the skin-vs-floor clip be seen.
+        fmat = unreal.EditorAssetLibrary.load_asset("/Game/Maps/M_FloorRef")
+        comp = floor.get_component_by_class(unreal.StaticMeshComponent) if floor else None
+        if fmat and comp:
+            comp.set_material(0, fmat)
+            out["floor_material"] = True
 
     # Sun — drives the SkyAtmosphere and lights the scene.
     dl = eas.spawn_actor_from_class(unreal.DirectionalLight, unreal.Vector(0, 0, 800), unreal.Rotator(-46, 30, 0))

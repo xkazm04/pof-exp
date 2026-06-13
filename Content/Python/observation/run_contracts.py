@@ -93,6 +93,13 @@ def metrics(trace, obs, cursor):
         mz = [r.get("meshMinZ") for r in trace if r.get("meshMinZ") is not None]
         if mz:
             m["mesh_min_z"] = min(mz)
+        # Mesh relative-Z during the dodge montage: catches the visual mesh FLOATING (lift bug —
+        # a 2m float read as only ~2% pixel change, under the visual budget) or sinking. Geometric
+        # failure -> numeric axis, where a 30px-in-frame player can't hide.
+        drz = [r.get("meshRelZ") for r in trace if r.get("montage") and r.get("meshRelZ") is not None]
+        if drz:
+            m["dodge_mesh_rel_z_max"] = max(drz)
+            m["dodge_mesh_rel_z_min"] = min(drz)
         if cursor is not None:
             cx, cy = cursor
             tox, toy = cx - m["final_x"], cy - m["final_y"]
@@ -145,6 +152,12 @@ def check(c, m):
     if k == "mesh_min_z_gt":
         v = m.get("mesh_min_z")
         return (v is not None and v > c["z"], f"mesh_min_z={v:.0f} (>{c['z']})" if v is not None else "no meshZ")
+    if k == "mesh_rel_z_in":
+        lo, hi = m.get("dodge_mesh_rel_z_min"), m.get("dodge_mesh_rel_z_max")
+        if lo is None:
+            return (False, "no dodge meshRelZ")
+        ok = c["lo"] <= lo and hi <= c["hi"]
+        return (ok, f"dodge meshRelZ {lo:.0f}..{hi:.0f} (in {c['lo']}..{c['hi']})")
     return (False, f"unknown check {k}")
 
 

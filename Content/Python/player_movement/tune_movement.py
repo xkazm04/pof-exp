@@ -19,6 +19,7 @@ KNOWN = {
     "acceleration_from_idle", "acceleration_at_full_speed", "braking_deceleration",
     "movement_ground_friction", "rotation_rate_idle", "rotation_rate_at_speed",
     "dodge_montage_play_rate", "dodge_distance", "dodge_duration", "dodge_max_mesh_lift",
+    "dodge_mesh_lift", "dodge_mesh_lift_speed",
 }
 
 

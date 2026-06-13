@@ -24,7 +24,7 @@ def run(args):
     except Exception as e:
         info["set_error"] = str(e)
     try:
-        info["force_root_lock"] = a.get_editor_property("root_motion_root_lock")
+        info["force_root_lock"] = str(a.get_editor_property("root_motion_root_lock"))
         info["num_frames"] = a.get_number_of_sampled_keys() if hasattr(a, "get_number_of_sampled_keys") else None
     except Exception:
         pass
