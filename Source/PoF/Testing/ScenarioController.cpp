@@ -16,6 +16,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "UnrealClient.h"
+#include "AIController.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Player/ARPGPlayerCharacter.h"
@@ -82,6 +83,7 @@ bool UScenarioController::LoadScenario(const FString& Path)
     if (Root->TryGetNumberField(TEXT("settle"), D)) SettleTime = (float)D;
     Root->TryGetStringField(TEXT("out_dir"), OutDir);
     Root->TryGetStringField(TEXT("play_anim"), PlayAnim);
+    Root->TryGetBoolField(TEXT("disable_ai"), bDisableAI);
 
     const TArray<TSharedPtr<FJsonValue>>* InArr = nullptr;
     if (Root->TryGetArrayField(TEXT("inputs"), InArr))
@@ -183,6 +185,28 @@ void UScenarioController::RemoveNoiseActors()
             *A->GetActorLabel(), *A->GetClass()->GetName());
         A->Destroy();
     }
+}
+
+void UScenarioController::DisableCombatants()
+{
+    bCombatantsDisabled = true;
+    UWorld* W = GetWorld();
+    if (!W) return;
+    const APawn* Player = GetPawn();
+    TArray<APawn*> ToKill;
+    for (TActorIterator<APawn> It(W); It; ++It)
+    {
+        APawn* P = *It;
+        if (P && P != Player && Cast<AAIController>(P->GetController()))
+        {
+            ToKill.Add(P);
+        }
+    }
+    for (APawn* P : ToKill)
+    {
+        P->Destroy();
+    }
+    UE_LOG(LogPoFScenario, Display, TEXT("[scenario] disable_ai: removed %d AI-possessed pawn(s)"), ToKill.Num());
 }
 
 void UScenarioController::Begin()
@@ -475,7 +499,10 @@ void UScenarioController::RecordTrace(float DeltaTime)
                 MontPos = AI->Montage_GetPosition(M);
                 if (M == PrevMontage && PrevMontagePos >= 0.f && MontPos >= PrevMontagePos)
                 {
-                    const FTransform RM = M->ExtractRootMotionFromTrackRange(PrevMontagePos, MontPos);
+                    // UE 5.8: ExtractRootMotionFromTrackRange gained a required FAnimExtractContext
+                    // param. A default context preserves the prior 2-arg behavior (matches how the
+                    // engine migrated its own internal callers in AnimMontage.cpp).
+                    const FTransform RM = M->ExtractRootMotionFromTrackRange(PrevMontagePos, MontPos, FAnimExtractContext());
                     RootDelta = RM.GetTranslation();
                 }
                 PrevMontage = M;
@@ -553,9 +580,18 @@ void UScenarioController::Tick(float DeltaTime)
     if (!bStarted)
     {
         PreElapsed += DeltaTime;
-        if (GetPawn() && PreElapsed >= SettleTime)
+        if (GetPawn())
         {
-            Begin();
+            // Remove hostiles the instant the pawn exists (before settle) so the player can't be
+            // damaged into a CanMove()-false state during the run.
+            if (bDisableAI && !bCombatantsDisabled)
+            {
+                DisableCombatants();
+            }
+            if (PreElapsed >= SettleTime)
+            {
+                Begin();
+            }
         }
         return;
     }

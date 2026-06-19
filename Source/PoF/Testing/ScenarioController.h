@@ -95,12 +95,21 @@ private:
     FVector DetLookAt = FVector::ZeroVector;
     bool bHaveDetCam = false;
 
+    // Isolate locomotion from combat: when "disable_ai" is set, destroy every AI-possessed
+    // pawn the moment the player pawn exists (before settle). Without this, VerticalSlice
+    // enemies damage the player → hit-react/stagger flips CanMove() false → HandleMove drops
+    // the injected movement and the character barely displaces. Class-agnostic (matches any
+    // BP/C++ enemy by its AAIController), unlike remove_actor_classes' exact-name match.
+    bool bDisableAI = false;
+    bool bCombatantsDisabled = false;
+
     bool LoadScenario(const FString& Path);
     void Begin();
     void ApplyInputs();
     void DoSample(int32 Idx);
     void RecordTrace(float DeltaTime);
     void RemoveNoiseActors();
+    void DisableCombatants();
     void Finish();
 
     APawn* GetPawn() const;
