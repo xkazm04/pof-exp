@@ -12,6 +12,10 @@
 #include "BehaviorTree/BlackboardComponent.h"
 #include "UI/EnemyHealthBarWidget.h"
 #include "Loot/ARPGLootDropComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 
 AARPGEnemyCharacter::AARPGEnemyCharacter()
 {
@@ -33,6 +37,43 @@ AARPGEnemyCharacter::AARPGEnemyCharacter()
 	HealthBarWidgetComp->SetDrawAtDesiredSize(true);
 	HealthBarWidgetComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	// Widget class assigned in Blueprint via SetWidgetClass
+}
+
+void AARPGEnemyCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// --- Sith lightsaber: turn the enemy's hand weapon into a glowing RED blade ---
+	if (WeaponMesh)
+	{
+		if (UStaticMesh* Blade = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")))
+		{
+			WeaponMesh->SetStaticMesh(Blade);
+		}
+		if (UMaterialInterface* SaberMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/FX/M_Saber_Red.M_Saber_Red")))
+		{
+			WeaponMesh->SetMaterial(0, SaberMat);
+		}
+		WeaponMesh->SetRelativeScale3D(FVector(0.04f, 0.04f, 1.1f));
+		WeaponMesh->SetRelativeRotation(FRotator(90.f, 0.f, 0.f));
+		WeaponMesh->SetRelativeLocation(FVector(55.f, 0.f, 0.f));
+		WeaponMesh->SetHiddenInGame(false);
+		WeaponMesh->SetVisibility(true);
+	}
+
+	// --- Sith body: override the placeholder flat-red blob material so the enemy reads as a
+	// dark-robed duelist (a believable Sith stand-in) instead of a glowing red shape. ---
+	if (USkeletalMeshComponent* Body = GetMesh())
+	{
+		if (UMaterialInterface* SithMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/FX/M_Sith_Body.M_Sith_Body")))
+		{
+			const int32 NumMats = Body->GetNumMaterials();
+			for (int32 i = 0; i < NumMats; ++i)
+			{
+				Body->SetMaterial(i, SithMat);
+			}
+		}
+	}
 }
 
 void AARPGEnemyCharacter::PossessedBy(AController* NewController)

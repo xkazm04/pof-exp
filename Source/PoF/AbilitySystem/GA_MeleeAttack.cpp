@@ -9,6 +9,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Engine/OverlapResult.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Animation/AnimMontage.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -29,6 +30,11 @@ UGA_MeleeAttack::UGA_MeleeAttack()
 
 	// Block re-activation while already attacking (prevent double-trigger)
 	ActivationBlockedTags.AddTag(ARPGGameplayTags::State_Attacking);
+
+	// A single default combo section so the ability can activate even when a Blueprint
+	// authored none; StartMontageAndListenForCombo also swaps in a real attack montage when
+	// the assigned one is the empty AM_MeleeCombo placeholder, so a bare setup still swings.
+	ComboSectionNames.Add(FName("Default"));
 }
 
 bool UGA_MeleeAttack::CanActivateAbility(
@@ -44,13 +50,9 @@ bool UGA_MeleeAttack::CanActivateAbility(
 	}
 
 	// A null montage is allowed — the runtime fallback (timer-driven attack window)
-	// handles characters without a skeletal mesh / anim instance. We only block
-	// activation when there are no combo sections, which is a real structural gap.
-	if (ComboSectionNames.Num() == 0)
-	{
-		return false;
-	}
-
+	// handles characters without a skeletal mesh / anim instance. Empty combo sections no
+	// longer block activation: StartMontageAndListenForCombo guarantees a default section
+	// + a real attack montage at runtime, so the attack still fires + swings.
 	return true;
 }
 
@@ -125,6 +127,21 @@ void UGA_MeleeAttack::StartMontageAndListenForCombo()
 	// These listeners (especially Event.MeleeHit) must outlive a montage that
 	// fails to play — otherwise EndAbility tears them down before a hit lands.
 	ListenForComboWindow();
+
+	// Self-heal a broken/empty attack montage: the project ships an empty AM_MeleeCombo
+	// placeholder (0s, no animation), so the basic attack played nothing. Fall back to the
+	// real sword slash (AM_SwordSlash) so the attack actually SWINGS, and guarantee a section.
+	if (!AttackMontage || AttackMontage->GetPlayLength() <= 0.f)
+	{
+		if (UAnimMontage* Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlash.AM_SwordSlash")))
+		{
+			AttackMontage = Slash;
+		}
+	}
+	if (ComboSectionNames.Num() == 0)
+	{
+		ComboSectionNames.Add(FName("Default"));
+	}
 
 	// Gray-box (false) mode: the ability applies its own damage at a deterministic
 	// mid-swing offset, resolving a forward melee target itself — no hit-detection

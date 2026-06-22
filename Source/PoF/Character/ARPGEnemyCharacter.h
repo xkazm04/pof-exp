@@ -52,6 +52,7 @@ class POF_API AARPGEnemyCharacter : public AARPGCharacterBase
 public:
 	AARPGEnemyCharacter();
 
+	virtual void BeginPlay() override;
 	virtual void PossessedBy(AController* NewController) override;
 
 	/** Set the enemy level before possession for difficulty scaling. */

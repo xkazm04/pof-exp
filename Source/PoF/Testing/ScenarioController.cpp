@@ -17,6 +17,8 @@
 #include "EngineUtils.h"
 #include "UnrealClient.h"
 #include "AIController.h"
+#include "AI/ARPGSimpleAIController.h"
+#include "Character/ARPGEnemyCharacter.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Player/ARPGPlayerCharacter.h"
@@ -84,6 +86,8 @@ bool UScenarioController::LoadScenario(const FString& Path)
     Root->TryGetStringField(TEXT("out_dir"), OutDir);
     Root->TryGetStringField(TEXT("play_anim"), PlayAnim);
     Root->TryGetBoolField(TEXT("disable_ai"), bDisableAI);
+    Root->TryGetBoolField(TEXT("simple_enemy_ai"), bSimpleEnemyAI);
+    Root->TryGetBoolField(TEXT("melee_engage"), bMeleeEngage);
 
     const TArray<TSharedPtr<FJsonValue>>* InArr = nullptr;
     if (Root->TryGetArrayField(TEXT("inputs"), InArr))
@@ -209,12 +213,82 @@ void UScenarioController::DisableCombatants()
     UE_LOG(LogPoFScenario, Display, TEXT("[scenario] disable_ai: removed %d AI-possessed pawn(s)"), ToKill.Num());
 }
 
+void UScenarioController::SwapEnemiesToSimpleAI()
+{
+    UWorld* W = GetWorld();
+    if (!W) return;
+    int32 Swapped = 0;
+    for (TActorIterator<AARPGEnemyCharacter> It(W); It; ++It)
+    {
+        AARPGEnemyCharacter* Enemy = *It;
+        if (!Enemy || Enemy->IsDead()) continue;
+        // Already nav-independent? leave it.
+        if (Cast<AARPGSimpleAIController>(Enemy->GetController())) continue;
+        if (AController* Old = Enemy->GetController())
+        {
+            Old->UnPossess();
+            Old->Destroy();
+        }
+        FActorSpawnParameters Params;
+        Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+        if (AARPGSimpleAIController* SC = W->SpawnActor<AARPGSimpleAIController>(AARPGSimpleAIController::StaticClass(), Params))
+        {
+            SC->Possess(Enemy);
+            ++Swapped;
+        }
+    }
+    UE_LOG(LogPoFScenario, Display, TEXT("[scenario] simple_enemy_ai: re-possessed %d enemy(ies) with the nav-independent controller"), Swapped);
+}
+
+void UScenarioController::EngageNearestEnemy()
+{
+    UWorld* W = GetWorld();
+    if (!W) return;
+    APawn* Player = GetPawn();
+    if (!Player) return;
+
+    const FVector PLoc = Player->GetActorLocation();
+    AARPGEnemyCharacter* Best = nullptr;
+    float BestDist = TNumericLimits<float>::Max();
+    for (TActorIterator<AARPGEnemyCharacter> It(W); It; ++It)
+    {
+        AARPGEnemyCharacter* E = *It;
+        if (!E || E->IsDead()) continue;
+        const float D = FVector::Dist(E->GetActorLocation(), PLoc);
+        if (D < BestDist) { BestDist = D; Best = E; }
+    }
+    if (!Best)
+    {
+        UE_LOG(LogPoFScenario, Warning, TEXT("[scenario] melee_engage: no enemy found"));
+        return;
+    }
+
+    // Place the enemy just inside its own AttackRange, directly ahead of the player, facing
+    // back at the player so its very next controller tick faces + swings (front-arc damage lands).
+    const float Range = FMath::Max(Best->GetAttackRange(), 100.f);
+    const FVector Fwd = Player->GetActorForwardVector().GetSafeNormal2D();
+    const FVector Target = PLoc + Fwd * (Range * 0.6f);
+    Best->SetActorLocation(Target, false, nullptr, ETeleportType::TeleportPhysics);
+    const FVector ToPlayer = (PLoc - Target).GetSafeNormal2D();
+    Best->SetActorRotation(FRotator(0.f, ToPlayer.Rotation().Yaw, 0.f));
+    UE_LOG(LogPoFScenario, Display, TEXT("[scenario] melee_engage: placed %s %.0fcm in front of player (range %.0f)"),
+        *Best->GetName(), Range * 0.6f, Range);
+}
+
 void UScenarioController::Begin()
 {
     bStarted = true;
     ScnTime = 0.f;
     WasActive.Init(false, Inputs.Num());
     RemoveNoiseActors();
+    if (bSimpleEnemyAI && !bDisableAI)
+    {
+        SwapEnemiesToSimpleAI();
+    }
+    if (bMeleeEngage && !bDisableAI)
+    {
+        EngageNearestEnemy();
+    }
     if (!PlayAnim.IsEmpty())
     {
         if (USkeletalMeshComponent* Mesh = GetMesh())
@@ -450,6 +524,81 @@ void UScenarioController::CaptureViewport(int32 Idx)
     UE_LOG(LogPoFScenario, Display, TEXT("[scenario] viewport screenshot requested -> %s"), *Path);
 }
 
+void UScenarioController::SampleMotionQuality(float DeltaTime)
+{
+    // The Motion Quality Probe: turns "the animation looks broken" into measurable, named
+    // failures. VLMs judge fine-grained motion poorly (foot-slide, pops), but these are exactly
+    // computable from the skeleton — so we measure, not guess. Signals:
+    //   - foot_slide: a PLANTED foot should be world-stationary; its horizontal travel while
+    //     grounded is the classic foot-skating artifact (locomotion speed != animation speed).
+    //   - joint accel: a blend/state-machine pop is a velocity discontinuity = an accel spike.
+    USkeletalMeshComponent* Mesh = GetMesh();
+    LastFootSlideL = -1.0;
+    LastFootSlideR = -1.0;
+    LastJointAccel = 0.0;
+    if (!Mesh || DeltaTime < KINDA_SMALL_NUMBER)
+    {
+        return;
+    }
+    Mesh->RefreshBoneTransforms();
+
+    auto BoneWorld = [Mesh](const TCHAR* Name, bool& bOk) -> FVector
+    {
+        const FName BN(Name);
+        if (Mesh->GetBoneIndex(BN) == INDEX_NONE) { bOk = false; return FVector::ZeroVector; }
+        bOk = true;
+        return Mesh->GetSocketTransform(BN, RTS_World).GetTranslation();
+    };
+
+    bool bFL = false, bFR = false, bPV = false;
+    const FVector FL = BoneWorld(TEXT("foot_l"), bFL);
+    const FVector FR = BoneWorld(TEXT("foot_r"), bFR);
+    const FVector PV = BoneWorld(TEXT("pelvis"), bPV);
+
+    if (bHavePrevKin && bFL && bFR)
+    {
+        // The in-contact foot is the lower one (+ the other if within a small band of it —
+        // double stance). A grounded foot should not travel horizontally in WORLD space.
+        const float GroundRef = FMath::Min(FL.Z, FR.Z);
+        const float ContactBand = 6.f; // cm above the lower foot still counts as grounded
+        auto SlideOf = [&](const FVector& Cur, const FVector& Prev, float FootZ) -> double
+        {
+            if ((FootZ - GroundRef) >= ContactBand) return -1.0; // airborne (swing phase)
+            return FVector(Cur.X - Prev.X, Cur.Y - Prev.Y, 0.f).Size();
+        };
+        LastFootSlideL = SlideOf(FL, PrevFootL, FL.Z);
+        LastFootSlideR = SlideOf(FR, PrevFootR, FR.Z);
+        if (LastFootSlideL >= 0.0) { FootSlideAccum += LastFootSlideL; FootContactTime += DeltaTime; }
+        if (LastFootSlideR >= 0.0) { FootSlideAccum += LastFootSlideR; FootContactTime += DeltaTime; }
+
+        const FVector VL = (FL - PrevFootL) / DeltaTime;
+        const FVector VR = (FR - PrevFootR) / DeltaTime;
+        const FVector VP = (PV - PrevPelvis) / DeltaTime;
+        if (bHavePrevKinVel)
+        {
+            const double AL = ((VL - PrevFootLVel) / DeltaTime).Size();
+            const double AR = ((VR - PrevFootRVel) / DeltaTime).Size();
+            const double AP = ((VP - PrevPelvisVel) / DeltaTime).Size();
+            LastJointAccel = FMath::Max3(AL, AR, AP);
+            JointJerkAccum += (AL + AR + AP);
+            if (LastJointAccel > MaxJointAccel)
+            {
+                MaxJointAccel = LastJointAccel;
+                MaxJointAccelTime = ScnTime;
+            }
+        }
+        PrevFootLVel = VL;
+        PrevFootRVel = VR;
+        PrevPelvisVel = VP;
+        bHavePrevKinVel = true;
+    }
+
+    PrevFootL = FL;
+    PrevFootR = FR;
+    PrevPelvis = PV;
+    bHavePrevKin = bFL && bFR && bPV;
+}
+
 void UScenarioController::RecordTrace(float DeltaTime)
 {
     APawn* P = GetPawn();
@@ -533,6 +682,17 @@ void UScenarioController::RecordTrace(float DeltaTime)
     R->SetNumberField(TEXT("dRootX"), RootDelta.X);
     R->SetNumberField(TEXT("dRootY"), RootDelta.Y);
 
+    // --- Motion Quality Probe: per-tick foot-slide + joint-acceleration (pop) signals ---
+    SampleMotionQuality(DeltaTime);
+    R->SetNumberField(TEXT("footSlideL"), LastFootSlideL);
+    R->SetNumberField(TEXT("footSlideR"), LastFootSlideR);
+    R->SetNumberField(TEXT("jointAccel"), LastJointAccel);
+    // Coarse layer-overlap signal: a montage driving the body while locomotion is also moving it.
+    if (!MontName.IsEmpty() && Vel.Size2D() > 50.f)
+    {
+        MontageMoveOverlap += DeltaTime;
+    }
+
     TraceJson.Add(MakeShared<FJsonValueObject>(R));
     PrevTraceLoc = Loc;
     bHavePrevTrace = true;
@@ -546,6 +706,20 @@ void UScenarioController::Finish()
     Out->SetBoolField(TEXT("started"), true);
     Out->SetNumberField(TEXT("total_seconds"), TotalSeconds);
     Out->SetArrayField(TEXT("samples"), SamplesJson);
+
+    // Motion Quality Probe summary — the headline animation-quality signals an agent reads to
+    // judge "does it move right", not just "did it move". foot_slide_rate_cps ~0 = clean stance;
+    // a high value = foot-skating. max_joint_accel spikes on blend/state pops.
+    TSharedPtr<FJsonObject> MQ = MakeShared<FJsonObject>();
+    MQ->SetNumberField(TEXT("foot_slide_total_cm"), FootSlideAccum);
+    MQ->SetNumberField(TEXT("foot_contact_time_s"), FootContactTime);
+    MQ->SetNumberField(TEXT("foot_slide_rate_cps"),
+        FootContactTime > KINDA_SMALL_NUMBER ? FootSlideAccum / FootContactTime : 0.0);
+    MQ->SetNumberField(TEXT("joint_jerk_total"), JointJerkAccum);
+    MQ->SetNumberField(TEXT("max_joint_accel"), MaxJointAccel);
+    MQ->SetNumberField(TEXT("max_joint_accel_time"), MaxJointAccelTime);
+    MQ->SetNumberField(TEXT("montage_move_overlap_s"), MontageMoveOverlap);
+    Out->SetObjectField(TEXT("motion_quality"), MQ);
 
     FString OutStr;
     TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutStr);

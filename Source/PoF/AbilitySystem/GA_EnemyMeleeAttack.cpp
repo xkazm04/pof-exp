@@ -9,6 +9,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Animation/AnimMontage.h"
 #include "GameFramework/Character.h"
 #include "AbilitySystem/Effects/GE_Damage.h"
 
@@ -52,6 +53,16 @@ void UGA_EnemyMeleeAttack::ActivateAbility(
 	WaitHit->EventReceived.AddDynamic(this, &UGA_EnemyMeleeAttack::OnMeleeHitEvent);
 	WaitHit->ReadyForActivation();
 
+	// Self-heal an empty swing montage (same placeholder issue as the player melee): fall back
+	// to the real sword slash so the Sith actually SWINGS instead of doing nothing.
+	if (!SwingMontage || SwingMontage->GetPlayLength() <= 0.f)
+	{
+		if (UAnimMontage* Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlash.AM_SwordSlash")))
+		{
+			SwingMontage = Slash;
+		}
+	}
+
 	// Determine whether this avatar can actually play the swing montage. On a
 	// gray-box character (no SkeletalMesh / AnimInstance) or with an empty
 	// montage, PlayMontageAndWait fails internally; we skip it and run a pure
@@ -68,6 +79,10 @@ void UGA_EnemyMeleeAttack::ActivateAbility(
 			}
 		}
 	}
+
+	UE_LOG(LogTemp, Verbose, TEXT("[GA_EnemyMelee] swing: canPlayMontage=%d montage=%s len=%.2f"),
+		bCanPlayMontage, SwingMontage ? *SwingMontage->GetName() : TEXT("null"),
+		SwingMontage ? SwingMontage->GetPlayLength() : 0.f);
 
 	if (bCanPlayMontage)
 	{
@@ -135,6 +150,13 @@ void UGA_EnemyMeleeAttack::OnMontageCompleted()
 	if (bUsingFallbackWindow)
 	{
 		return;
+	}
+	// The self-healed swing montage (AM_SwordSlash) carries no MeleeHit AnimNotify, so the
+	// notify-driven hit path never fires. Land the front-arc damage on completion if nothing
+	// has hit yet — this makes the enemy swing connect with ANY montage, authored or borrowed.
+	if (!bDamageApplied)
+	{
+		PerformFrontArcDamage();
 	}
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }

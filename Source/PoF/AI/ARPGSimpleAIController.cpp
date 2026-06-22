@@ -72,10 +72,17 @@ void AARPGSimpleAIController::Tick(float DeltaSeconds)
 		{
 			FGameplayTagContainer AttackTags;
 			AttackTags.AddTag(AttackAbilityTag);
-			if (ASC->TryActivateAbilitiesByTag(AttackTags))
+			const bool bActivated = ASC->TryActivateAbilitiesByTag(AttackTags);
+			UE_LOG(LogTemp, Verbose, TEXT("[SimpleAI] attack attempt tag=%s activated=%d"),
+				*AttackAbilityTag.ToString(), bActivated);
+			if (bActivated)
 			{
 				TimeSinceLastAttack = 0.f;
 			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[SimpleAI] in range but enemy has NO ASC"));
 		}
 	}
 }

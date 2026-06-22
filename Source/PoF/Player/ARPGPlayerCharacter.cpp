@@ -9,6 +9,10 @@
 #include "AbilitySystem/ARPGGameplayTags.h"
 #include "GameplayEffectExtension.h"
 #include "AbilitySystem/ARPGAbilityUnlockComponent.h"
+#include "AbilitySystem/GA_ForcePush.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -27,10 +31,10 @@
 
 AARPGPlayerCharacter::AARPGPlayerCharacter()
 {
-	// --- Debug Arrow ---
+	// --- Debug Arrow (editor-only facing gizmo; hidden in-game so it doesn't render in play) ---
 	DebugArrow = CreateDefaultSubobject<UArrowComponent>(TEXT("DebugArrow"));
 	DebugArrow->SetupAttachment(RootComponent);
-	DebugArrow->SetHiddenInGame(false);
+	DebugArrow->SetHiddenInGame(true);
 	DebugArrow->ArrowSize = 2.0f;
 	DebugArrow->SetRelativeLocation(FVector(0.f, 0.f, 60.f));
 
@@ -50,6 +54,12 @@ AARPGPlayerCharacter::AARPGPlayerCharacter()
 
 	// --- Ability Unlock/Upgrade Component ---
 	AbilityUnlockComp = CreateDefaultSubobject<UARPGAbilityUnlockComponent>(TEXT("AbilityUnlockComp"));
+
+	// --- Force Push (Star Wars duel): grant on possession + bind to hotbar slot 0 (key '1'). ---
+	// Slot 0 is driven by IA_AbilitySlot1 (EKeys::One) → TryActivateAbilitySlot(0). A Blueprint
+	// subclass may override these arrays, so BeginPlay re-asserts the grant + slot defensively.
+	DefaultAbilities.Add(UGA_ForcePush::StaticClass());
+	AbilityLoadout.Add(0, UGA_ForcePush::StaticClass());
 
 	// --- Top-down mouse-aim control scheme (ARPG baseline) ---
 	// Player faces the cursor, not its movement direction. PLAYER-ONLY: the shared
@@ -75,6 +85,47 @@ void AARPGPlayerCharacter::BeginPlay()
 		// Seed the floats from GAS so the initial broadcast reflects the source of truth.
 		Health = ReadGASHealth(/*bMax=*/false, Health);
 		MaxHealth = ReadGASHealth(/*bMax=*/true, MaxHealth);
+
+		// Force Push must always be available in slot 1, even if a Blueprint loadout
+		// omitted it (Star Wars duel requirement: key '1' = Force Push). Grant once
+		// on the authority, then bind it to hotbar slot 0.
+		if (HasAuthority())
+		{
+			bool bAlreadyGranted = false;
+			for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+			{
+				if (Spec.Ability && Spec.Ability->GetClass() == UGA_ForcePush::StaticClass())
+				{
+					bAlreadyGranted = true;
+					break;
+				}
+			}
+			if (!bAlreadyGranted)
+			{
+				ASC->GiveAbility(FGameplayAbilitySpec(UGA_ForcePush::StaticClass(), 1, INDEX_NONE, this));
+			}
+		}
+		AssignAbilityToSlot(0, UGA_ForcePush::StaticClass());
+	}
+
+	// --- Lightsaber: turn the hand weapon into a glowing blade (Star Wars arena duel) ---
+	if (WeaponMesh)
+	{
+		if (UStaticMesh* Blade = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")))
+		{
+			WeaponMesh->SetStaticMesh(Blade);
+		}
+		if (UMaterialInterface* SaberMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/FX/M_Saber_Blue.M_Saber_Blue")))
+		{
+			WeaponMesh->SetMaterial(0, SaberMat);
+		}
+		// Engine cylinder is 100cm tall / 100cm dia, centered. Thin (~4cm), ~1.1m blade; rotate so
+		// it points out of the grip and offset so the base sits at the hand. Transform tuned by frame.
+		WeaponMesh->SetRelativeScale3D(FVector(0.04f, 0.04f, 1.1f));
+		WeaponMesh->SetRelativeRotation(FRotator(90.f, 0.f, 0.f));
+		WeaponMesh->SetRelativeLocation(FVector(55.f, 0.f, 0.f));
+		WeaponMesh->SetHiddenInGame(false);
+		WeaponMesh->SetVisibility(true);
 	}
 
 	// Broadcast initial values so any listening UI gets correct state

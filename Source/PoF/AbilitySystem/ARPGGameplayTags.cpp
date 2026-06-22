@@ -13,6 +13,7 @@ namespace ARPGGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_DashStrike,       "Ability.DashStrike",         "Player dash strike ability");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_WarCry,           "Ability.WarCry",             "Player war cry self-buff ability");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_ArcaneBeam,       "Ability.ArcaneBeam",         "Player channeled arcane beam ability");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_ForcePush,        "Ability.ForcePush",          "Force Push — telekinetic directional knockback + light damage (bound to slot 1)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_UsePotion,        "Ability.UsePotion",          "Player potion consumption ability");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_HitReact,         "Ability.HitReact",           "Hit reaction ability triggered by incoming damage");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Enemy_Melee,      "Ability.Enemy.Melee",        "Enemy melee attack ability");
@@ -89,6 +90,7 @@ namespace ARPGGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Cooldown_DashStrike, "Cooldown.DashStrike", "Cooldown tag for Dash Strike ability");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Cooldown_WarCry,     "Cooldown.WarCry",     "Cooldown tag for War Cry ability");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Cooldown_ArcaneBeam,"Cooldown.ArcaneBeam", "Cooldown tag for Arcane Beam ability");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Cooldown_ForcePush, "Cooldown.ForcePush",  "Cooldown tag for Force Push ability");
 
 	// --- Data (SetByCaller key for affix magnitude) ---
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Data_Affix_Magnitude, "Data.Affix.Magnitude", "SetByCaller: affix magnitude value applied by equip GE");

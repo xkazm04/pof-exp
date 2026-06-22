@@ -84,6 +84,29 @@ private:
     TObjectPtr<UAnimMontage> PrevMontage = nullptr;
     float PrevMontagePos = -1.f;
 
+    // --- Motion Quality Probe: per-tick kinematic animation-quality metrics ---
+    // Foot-slide: world-space horizontal travel of a PLANTED foot (should be ~0; nonzero is the
+    // classic foot-skating artifact when locomotion speed != animation speed). Jitter/pop: peak
+    // + total of joint ACCELERATION (a blend/state pop is a velocity discontinuity = an
+    // acceleration spike). Computed from foot_l / foot_r / pelvis world transforms each tick.
+    bool bHavePrevKin = false;     // have previous bone positions (=> can compute velocity)
+    bool bHavePrevKinVel = false;  // have previous bone velocities (=> can compute acceleration)
+    FVector PrevFootL = FVector::ZeroVector;
+    FVector PrevFootR = FVector::ZeroVector;
+    FVector PrevPelvis = FVector::ZeroVector;
+    FVector PrevFootLVel = FVector::ZeroVector;
+    FVector PrevFootRVel = FVector::ZeroVector;
+    FVector PrevPelvisVel = FVector::ZeroVector;
+    double FootSlideAccum = 0.0;     // summed cm of planted-foot horizontal travel
+    double FootContactTime = 0.0;    // summed seconds feet were in ground contact
+    double JointJerkAccum = 0.0;     // summed |acceleration| over tracked bones (total variation)
+    double MaxJointAccel = 0.0;      // peak |acceleration| (cm/s^2) — the single worst pop
+    float  MaxJointAccelTime = -1.f; // scenario time of the worst pop
+    double MontageMoveOverlap = 0.0; // seconds a montage played while speed>threshold (layer-overlap signal)
+    double LastFootSlideL = -1.0;    // mirrored into the dense per-tick trace for debugging
+    double LastFootSlideR = -1.0;
+    double LastJointAccel = 0.0;
+
     // Deterministic visual-gate capture: frames keyed to MONTAGE POSITION (not wall-clock) from
     // a FIXED world-space camera, with configured noise actors destroyed at Begin. This is the
     // pixel-stable capture the golden-image diff needs — wall-clock live frames varied
@@ -103,11 +126,24 @@ private:
     bool bDisableAI = false;
     bool bCombatantsDisabled = false;
 
+    // When set, re-possess every enemy with the nav-independent ARPGSimpleAIController so a
+    // headless arena duel (no baked navmesh) actually plays: enemies steer straight at the
+    // player and attack on cooldown. The production BT controller needs a navmesh to chase.
+    bool bSimpleEnemyAI = false;
+
+    // When set, teleport the nearest enemy directly in front of the player within its
+    // AttackRange at scenario start, so a melee duel engages deterministically instead of
+    // depending on chase pathing (mirrors VSEnemyAttackTest's deterministic placement).
+    bool bMeleeEngage = false;
+
     bool LoadScenario(const FString& Path);
     void Begin();
+    void SwapEnemiesToSimpleAI();
+    void EngageNearestEnemy();
     void ApplyInputs();
     void DoSample(int32 Idx);
     void RecordTrace(float DeltaTime);
+    void SampleMotionQuality(float DeltaTime);
     void RemoveNoiseActors();
     void DisableCombatants();
     void Finish();
