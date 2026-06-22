@@ -131,19 +131,14 @@ void UGA_MeleeAttack::StartMontageAndListenForCombo()
 	// Self-heal a broken/empty attack montage: the project ships an empty AM_MeleeCombo
 	// placeholder (0s, no animation), so the basic attack played nothing. Fall back to the
 	// real sword slash (AM_SwordSlash) so the attack actually SWINGS, and guarantee a section.
-	// ALWAYS use the custom code-authored slash (AM_SwordSlashC) for the basic attack so it
-	// shows in normal play (PIE), not only when the assigned montage is empty. Fall back to
-	// the original / any assigned montage only if the custom one is missing.
-	if (UAnimMontage* Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlashC.AM_SwordSlashC")))
+	// Prefer the Mixamo mocap slash (natural full-body), then the code-authored slash, then
+	// the original. Always overrides the assigned montage so the basic attack shows it in PIE.
+	UAnimMontage* Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_MixamoSlash.AM_MixamoSlash"));
+	if (!Slash) { Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlashC.AM_SwordSlashC")); }
+	if (!Slash) { Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlash.AM_SwordSlash")); }
+	if (Slash)
 	{
 		AttackMontage = Slash;
-	}
-	else if (!AttackMontage || AttackMontage->GetPlayLength() <= 0.f)
-	{
-		if (UAnimMontage* Fallback = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlash.AM_SwordSlash")))
-		{
-			AttackMontage = Fallback;
-		}
 	}
 	if (ComboSectionNames.Num() == 0)
 	{
