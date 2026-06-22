@@ -7,6 +7,7 @@ namespace ARPGGameplayTags
 	// --- Ability ---
 	POF_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Melee_LightAttack);
 	POF_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Melee_HeavyAttack);
+	POF_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Parry);
 	POF_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Ranged_Fireball);
 	POF_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Dodge);
 	POF_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Charge);

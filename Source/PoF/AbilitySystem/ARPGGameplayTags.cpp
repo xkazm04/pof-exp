@@ -5,6 +5,7 @@ namespace ARPGGameplayTags
 	// --- Ability ---
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Melee_LightAttack, "Ability.Melee.LightAttack", "Fast melee combo attack");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Melee_HeavyAttack, "Ability.Melee.HeavyAttack", "Slow high-damage melee attack");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Parry,            "Ability.Parry",              "Saber parry/block — deflects an incoming melee attack");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Ranged_Fireball,   "Ability.Ranged.Fireball",   "Ranged fireball projectile");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Dodge,             "Ability.Dodge",              "Dodge roll ability");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Charge,           "Ability.Charge",             "Brute charge attack ability");

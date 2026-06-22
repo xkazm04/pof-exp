@@ -161,6 +161,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Movement|State")
 	void SetAttacking(bool bNewAttacking) { bIsAttacking = bNewAttacking; }
 
+	/** Whether the character is currently in a saber parry/block (set by GA_Parry). */
+	UFUNCTION(BlueprintPure, Category = "Combat|Parry")
+	bool IsParrying() const { return bIsParrying; }
+
+	UFUNCTION(BlueprintCallable, Category = "Combat|Parry")
+	void SetParrying(bool bNewParrying) { bIsParrying = bNewParrying; }
+
 	/** Whether the combo input window is currently open. */
 	UFUNCTION(BlueprintPure, Category = "Combat|Combo")
 	bool IsComboWindowOpen() const { return bComboWindowOpen; }
@@ -604,6 +611,10 @@ protected:
 	/** Set to true to block movement during attack montages. */
 	UPROPERTY(BlueprintReadWrite, Category = "Movement|State")
 	bool bIsAttacking = false;
+
+	/** True while a saber parry/block is active (set by GA_Parry). */
+	UPROPERTY(BlueprintReadOnly, Category = "Combat|Parry")
+	bool bIsParrying = false;
 
 	/** Set to true to block movement during stagger. */
 	UPROPERTY(BlueprintReadWrite, Category = "Movement|State")

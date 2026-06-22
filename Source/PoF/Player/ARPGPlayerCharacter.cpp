@@ -10,6 +10,7 @@
 #include "GameplayEffectExtension.h"
 #include "AbilitySystem/ARPGAbilityUnlockComponent.h"
 #include "AbilitySystem/GA_ForcePush.h"
+#include "AbilitySystem/GA_Parry.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
@@ -61,6 +62,10 @@ AARPGPlayerCharacter::AARPGPlayerCharacter()
 	DefaultAbilities.Add(UGA_ForcePush::StaticClass());
 	AbilityLoadout.Add(0, UGA_ForcePush::StaticClass());
 
+	// --- Saber parry (Star Wars duel): grant + bind to hotbar slot 1 (key '2'). ---
+	DefaultAbilities.Add(UGA_Parry::StaticClass());
+	AbilityLoadout.Add(1, UGA_Parry::StaticClass());
+
 	// --- Top-down mouse-aim control scheme (ARPG baseline) ---
 	// Player faces the cursor, not its movement direction. PLAYER-ONLY: the shared
 	// AARPGCharacterBase keeps bOrientRotationToMovement=true for AI/NPCs.
@@ -106,6 +111,25 @@ void AARPGPlayerCharacter::BeginPlay()
 			}
 		}
 		AssignAbilityToSlot(0, UGA_ForcePush::StaticClass());
+
+		// Saber parry on slot 1 (key '2') — grant defensively, then bind.
+		if (HasAuthority())
+		{
+			bool bParryGranted = false;
+			for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+			{
+				if (Spec.Ability && Spec.Ability->GetClass() == UGA_Parry::StaticClass())
+				{
+					bParryGranted = true;
+					break;
+				}
+			}
+			if (!bParryGranted)
+			{
+				ASC->GiveAbility(FGameplayAbilitySpec(UGA_Parry::StaticClass(), 1, INDEX_NONE, this));
+			}
+		}
+		AssignAbilityToSlot(1, UGA_Parry::StaticClass());
 	}
 
 	// --- Lightsaber: turn the hand weapon into a glowing blade (Star Wars arena duel) ---

@@ -1,6 +1,8 @@
 #include "Combat/SaberClashSubsystem.h"
 
 #include "Character/ARPGCharacterBase.h"
+#include "AbilitySystem/ARPGGameplayTags.h"
+#include "AbilitySystemComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Engine/StaticMesh.h"
@@ -12,7 +14,8 @@
 
 namespace
 {
-	constexpr float CLASH_THRESHOLD = 30.f;    // cm between blade segments to count as a clash
+	constexpr float CLASH_THRESHOLD = 30.f;    // cm between blade segments for a free clash
+	constexpr float PARRY_RANGE = 170.f;       // saber range within which a timed block deflects
 	constexpr float CLASH_COOLDOWN = 0.18f;    // s between successive clashes
 	constexpr float HITSTOP_SECONDS = 0.06f;   // real-time hit-stop duration
 	constexpr float HITSTOP_DILATION = 0.08f;  // time scale during the hit-stop
@@ -53,14 +56,15 @@ void USaberClashSubsystem::Tick(float DeltaTime)
 		return;
 	}
 
-	// Collect every visible saber blade segment.
-	TArray<TPair<FVector, FVector>> Blades;
+	// Collect every visible saber blade segment + its owner.
+	struct FBlade { FVector Start; FVector End; AARPGCharacterBase* Owner; };
+	TArray<FBlade> Blades;
 	for (TActorIterator<AARPGCharacterBase> It(World); It; ++It)
 	{
 		FVector S, E;
 		if (It->GetSaberSegment(S, E))
 		{
-			Blades.Emplace(S, E);
+			Blades.Add(FBlade{S, E, *It});
 		}
 	}
 
@@ -74,11 +78,36 @@ void USaberClashSubsystem::Tick(float DeltaTime)
 		for (int32 j = i + 1; j < Blades.Num(); ++j)
 		{
 			FVector P1, P2;
-			FMath::SegmentDistToSegmentSafe(Blades[i].Key, Blades[i].Value, Blades[j].Key, Blades[j].Value, P1, P2);
-			MinDist = FMath::Min(MinDist, (float)FVector::Dist(P1, P2));
-			if (FVector::Dist(P1, P2) <= CLASH_THRESHOLD)
+			FMath::SegmentDistToSegmentSafe(Blades[i].Start, Blades[i].End, Blades[j].Start, Blades[j].End, P1, P2);
+			const float D = FVector::Dist(P1, P2);
+			MinDist = FMath::Min(MinDist, D);
+
+			// A parry: one fighter is blocking (in the parry window) while the other is mid-attack.
+			// Use a generous saber range rather than exact blade contact — at duel spacing the
+			// blades rarely cross to within a few cm, but a well-timed block still deflects the
+			// swing. This is gameplay timing (block active + attacker swinging + in range), and
+			// the FX still fires at the closest point between the two blades.
+			AARPGCharacterBase* A = Blades[i].Owner;
+			AARPGCharacterBase* B = Blades[j].Owner;
+			AARPGCharacterBase* Defender = nullptr;
+			AARPGCharacterBase* Attacker = nullptr;
+			if (A && B)
 			{
-				const FVector ClashLoc = (P1 + P2) * 0.5f;
+				if (A->IsParrying() && B->IsAttacking()) { Defender = A; Attacker = B; }
+				else if (B->IsParrying() && A->IsAttacking()) { Defender = B; Attacker = A; }
+			}
+			const bool bParry = (Attacker != nullptr) && (D < PARRY_RANGE);
+
+			if (bParry || D <= CLASH_THRESHOLD)
+			{
+				// For a parry, fire the FX ON the blocking blade (where it catches the swing)
+				// rather than the midpoint, so the spark reads as the saber deflecting. P1 is
+				// the closest point on Blades[i], P2 on Blades[j].
+				FVector ClashLoc = (P1 + P2) * 0.5f;
+				if (bParry)
+				{
+					ClashLoc = (Defender == A) ? P1 : P2;
+				}
 				LastClashLocation = ClashLoc;
 				bHadClashThisFrame = true;
 
@@ -87,7 +116,24 @@ void USaberClashSubsystem::Tick(float DeltaTime)
 				UGameplayStatics::SetGlobalTimeDilation(World, HITSTOP_DILATION);
 				HitStopUntilRealTime = World->GetRealTimeSeconds() + HITSTOP_SECONDS;
 				bHitStopActive = true;
-				UE_LOG(LogTemp, Display, TEXT("[SaberClash] clash at %s"), *ClashLoc.ToString());
+
+				if (bParry)
+				{
+					if (UAbilitySystemComponent* AttASC = Attacker->GetAbilitySystemComponent())
+					{
+						FGameplayTagContainer MeleeTags;
+						MeleeTags.AddTag(ARPGGameplayTags::Ability_Melee_LightAttack);
+						MeleeTags.AddTag(ARPGGameplayTags::Ability_Enemy_Melee);
+						AttASC->CancelAbilities(&MeleeTags);
+					}
+					Attacker->SetAttacking(false);
+					UE_LOG(LogTemp, Display, TEXT("[SaberClash] PARRY! %s deflected %s (d=%.0f)"),
+						*Defender->GetName(), *Attacker->GetName(), D);
+				}
+				else
+				{
+					UE_LOG(LogTemp, Display, TEXT("[SaberClash] clash at %s"), *ClashLoc.ToString());
+				}
 				return;  // one clash per tick
 			}
 		}
