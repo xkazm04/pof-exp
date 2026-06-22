@@ -133,7 +133,13 @@ void UGA_MeleeAttack::StartMontageAndListenForCombo()
 	// real sword slash (AM_SwordSlash) so the attack actually SWINGS, and guarantee a section.
 	if (!AttackMontage || AttackMontage->GetPlayLength() <= 0.f)
 	{
-		if (UAnimMontage* Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlash.AM_SwordSlash")))
+		// Prefer the custom code-authored slash (AM_SwordSlashC); fall back to the original.
+		UAnimMontage* Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlashC.AM_SwordSlashC"));
+		if (!Slash)
+		{
+			Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlash.AM_SwordSlash"));
+		}
+		if (Slash)
 		{
 			AttackMontage = Slash;
 		}

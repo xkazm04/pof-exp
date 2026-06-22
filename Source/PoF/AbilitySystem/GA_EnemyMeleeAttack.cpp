@@ -57,7 +57,13 @@ void UGA_EnemyMeleeAttack::ActivateAbility(
 	// to the real sword slash so the Sith actually SWINGS instead of doing nothing.
 	if (!SwingMontage || SwingMontage->GetPlayLength() <= 0.f)
 	{
-		if (UAnimMontage* Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlash.AM_SwordSlash")))
+		// Prefer the custom code-authored slash; fall back to the original.
+		UAnimMontage* Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlashC.AM_SwordSlashC"));
+		if (!Slash)
+		{
+			Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlash.AM_SwordSlash"));
+		}
+		if (Slash)
 		{
 			SwingMontage = Slash;
 		}

@@ -4,6 +4,7 @@
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimationAsset.h"
 #include "Animation/AnimMontage.h"
+#include "Animation/AnimSingleNodeInstance.h"
 #include "GameplayTagContainer.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -295,6 +296,12 @@ void UScenarioController::Begin()
         {
             if (UAnimationAsset* Anim = LoadObject<UAnimationAsset>(nullptr, *PlayAnim))
             {
+                // Headless: a skeletal mesh only advances its pose when "rendered". Off-screen
+                // (-RenderOffScreen) a single-node anim otherwise freezes on an early frame, so
+                // every captured sample looks identical. Force it to always tick + disable URO
+                // so play_anim actually animates and we can sample distinct frames.
+                Mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+                Mesh->bEnableUpdateRateOptimizations = false;
                 Mesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
                 Mesh->PlayAnimation(Anim, true);
                 UE_LOG(LogPoFScenario, Display, TEXT("[scenario] force-play anim %s"), *PlayAnim);
@@ -392,6 +399,23 @@ void UScenarioController::ApplyInputs()
 
 void UScenarioController::DoSample(int32 Idx)
 {
+    // Scrub a force-played single-node anim to scenario time so each sample captures a KNOWN
+    // frame. Off-screen these anims don't auto-advance, so we set the position explicitly and
+    // force a bone refresh before the scene capture below.
+    if (!PlayAnim.IsEmpty())
+    {
+        if (USkeletalMeshComponent* Mesh = GetMesh())
+        {
+            if (UAnimSingleNodeInstance* SN = Mesh->GetSingleNodeInstance())
+            {
+                const float Len = SN->GetLength();
+                SN->SetPosition((Len > 0.f) ? FMath::Fmod(ScnTime, Len) : ScnTime, false);
+                Mesh->TickAnimation(0.f, false);
+                Mesh->RefreshBoneTransforms();
+            }
+        }
+    }
+
     APawn* P = GetPawn();
     TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
     S->SetNumberField(TEXT("t"), ScnTime);
