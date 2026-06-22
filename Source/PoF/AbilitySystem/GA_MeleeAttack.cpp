@@ -131,10 +131,9 @@ void UGA_MeleeAttack::StartMontageAndListenForCombo()
 	// Self-heal a broken/empty attack montage: the project ships an empty AM_MeleeCombo
 	// placeholder (0s, no animation), so the basic attack played nothing. Fall back to the
 	// real sword slash (AM_SwordSlash) so the attack actually SWINGS, and guarantee a section.
-	// Prefer the Mixamo mocap slash (natural full-body), then the code-authored slash, then
-	// the original. Always overrides the assigned montage so the basic attack shows it in PIE.
-	UAnimMontage* Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_MixamoSlash.AM_MixamoSlash"));
-	if (!Slash) { Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlashC.AM_SwordSlashC")); }
+	// Use the code-authored quick slash (AM_SwordSlashC); fall back to the original. Always
+	// overrides the assigned montage so the basic attack shows it in PIE.
+	UAnimMontage* Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlashC.AM_SwordSlashC"));
 	if (!Slash) { Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlash.AM_SwordSlash")); }
 	if (Slash)
 	{

@@ -21,11 +21,11 @@ FPS = 30
 # wrist snaps on impact; slow anticipation, fast 0.10s strike.
 SLASH = [
     (0.00, {"upperarm_r": (20, 5, 0), "lowerarm_r": (10, 0, 0)}),
-    (0.38, {"upperarm_r": (145, 30, 15), "lowerarm_r": (75, 0, 0), "spine_04": (5, 20, 0)}),    # windup: cock up-back, coil right, load back
-    (0.48, {"upperarm_r": (25, -30, 0), "lowerarm_r": (12, 0, 0),
-            "spine_04": (-12, -18, 0), "hand_r": (0, 0, 35)}),                                   # strike: chop down, uncoil+lean fwd, wrist snap
-    (0.66, {"upperarm_r": (-8, -55, -10), "lowerarm_r": (5, 0, 0), "spine_04": (-8, -25, 0)}),   # follow: low across-left, leaned in
-    (1.00, {"upperarm_r": (20, 5, 0), "lowerarm_r": (10, 0, 0)}),
+    (0.30, {"upperarm_r": (145, 30, 15), "lowerarm_r": (75, 0, 0), "spine_04": (5, 20, 0)}),    # windup: cock up-back, coil right, load back
+    (0.42, {"upperarm_r": (25, -30, 0), "lowerarm_r": (12, 0, 0),
+            "spine_04": (-12, -18, 0), "hand_r": (0, 0, 35)}),                                   # strike: FAST chop down, uncoil+lean, wrist snap
+    (0.58, {"upperarm_r": (-8, -55, -10), "lowerarm_r": (5, 0, 0), "spine_04": (-8, -25, 0)}),   # follow: low across-left, leaned in
+    (1.20, {"upperarm_r": (20, 5, 0), "lowerarm_r": (10, 0, 0)}),                                # recover/settle
 ]
 
 
