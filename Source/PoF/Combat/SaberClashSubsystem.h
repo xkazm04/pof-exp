@@ -29,5 +29,13 @@ private:
 	double HitStopUntilRealTime = 0.0;
 	bool bHitStopActive = false;
 
+	// Post-parry windows: the deflected attacker is briefly stunned, and the defender gets a
+	// riposte window in which their next strike deals bonus damage. Tracked in real time so
+	// the hit-stop dilation doesn't distort them.
+	TWeakObjectPtr<class AARPGCharacterBase> StunnedChar;
+	double StunUntilRealTime = 0.0;
+	TWeakObjectPtr<class AARPGCharacterBase> RiposteChar;
+	double RiposteUntilRealTime = 0.0;
+
 	void SpawnClashFX(UWorld* World, const FVector& Loc);
 };

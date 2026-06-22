@@ -23,6 +23,8 @@ namespace
 	constexpr float HITSTOP_SECONDS = 0.06f;   // real-time hit-stop duration
 	constexpr float HITSTOP_DILATION = 0.08f;  // time scale during the hit-stop
 	constexpr float FX_LIFESPAN = 0.25f;
+	constexpr float STUN_DURATION = 1.0f;      // s the deflected attacker is stunned
+	constexpr float RIPOSTE_WINDOW = 1.3f;     // s the defender's bonus-counter window stays open
 }
 
 bool USaberClashSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
@@ -51,6 +53,19 @@ void USaberClashSubsystem::Tick(float DeltaTime)
 	{
 		UGameplayStatics::SetGlobalTimeDilation(World, 1.0f);
 		bHitStopActive = false;
+	}
+
+	// Expire the post-parry stun + riposte windows (real time; runs even during cooldown).
+	const double NowReal = World->GetRealTimeSeconds();
+	if (StunnedChar.IsValid() && NowReal >= StunUntilRealTime)
+	{
+		StunnedChar->SetStaggered(false);
+		StunnedChar = nullptr;
+	}
+	if (RiposteChar.IsValid() && NowReal >= RiposteUntilRealTime)
+	{
+		RiposteChar->SetRiposteReady(false);
+		RiposteChar = nullptr;
 	}
 
 	if (ClashCooldown > 0.f)
@@ -143,7 +158,16 @@ void USaberClashSubsystem::Tick(float DeltaTime)
 						}
 					}
 
-					UE_LOG(LogTemp, Display, TEXT("[SaberClash] PARRY! %s deflected %s (d=%.0f)"),
+					// Stun the deflected attacker (the AI hesitates) and open a riposte window
+					// on the defender — their next strike in that window lands a bonus counter.
+					Attacker->SetStaggered(true);
+					StunnedChar = Attacker;
+					StunUntilRealTime = NowReal + STUN_DURATION;
+					Defender->SetRiposteReady(true);
+					RiposteChar = Defender;
+					RiposteUntilRealTime = NowReal + RIPOSTE_WINDOW;
+
+					UE_LOG(LogTemp, Display, TEXT("[SaberClash] PARRY! %s deflected %s (d=%.0f) — stun + riposte window open"),
 						*Defender->GetName(), *Attacker->GetName(), D);
 				}
 				else

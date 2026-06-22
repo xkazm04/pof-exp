@@ -11,6 +11,7 @@
 #include "AbilitySystem/ARPGAbilityUnlockComponent.h"
 #include "AbilitySystem/GA_ForcePush.h"
 #include "AbilitySystem/GA_Parry.h"
+#include "AbilitySystem/GA_MeleeAttack.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
@@ -65,6 +66,11 @@ AARPGPlayerCharacter::AARPGPlayerCharacter()
 	// --- Saber parry (Star Wars duel): grant + bind to hotbar slot 1 (key '2'). ---
 	DefaultAbilities.Add(UGA_Parry::StaticClass());
 	AbilityLoadout.Add(1, UGA_Parry::StaticClass());
+
+	// --- Basic saber attack (Star Wars duel): grant + bind to hotbar slot 2 (key '3').
+	// The post-parry riposte rides on this attack (bonus damage in the riposte window). ---
+	DefaultAbilities.Add(UGA_MeleeAttack::StaticClass());
+	AbilityLoadout.Add(2, UGA_MeleeAttack::StaticClass());
 
 	// --- Top-down mouse-aim control scheme (ARPG baseline) ---
 	// Player faces the cursor, not its movement direction. PLAYER-ONLY: the shared
@@ -130,6 +136,25 @@ void AARPGPlayerCharacter::BeginPlay()
 			}
 		}
 		AssignAbilityToSlot(1, UGA_Parry::StaticClass());
+
+		// Basic saber attack on slot 2 (key '3') — grant defensively, then bind.
+		if (HasAuthority())
+		{
+			bool bMeleeGranted = false;
+			for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+			{
+				if (Spec.Ability && Spec.Ability->GetClass() == UGA_MeleeAttack::StaticClass())
+				{
+					bMeleeGranted = true;
+					break;
+				}
+			}
+			if (!bMeleeGranted)
+			{
+				ASC->GiveAbility(FGameplayAbilitySpec(UGA_MeleeAttack::StaticClass(), 1, INDEX_NONE, this));
+			}
+		}
+		AssignAbilityToSlot(2, UGA_MeleeAttack::StaticClass());
 	}
 
 	// --- Lightsaber: turn the hand weapon into a glowing blade (Star Wars arena duel) ---

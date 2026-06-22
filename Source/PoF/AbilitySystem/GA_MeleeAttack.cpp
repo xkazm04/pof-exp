@@ -1,5 +1,6 @@
 #include "AbilitySystem/GA_MeleeAttack.h"
 #include "AbilitySystem/ARPGGameplayTags.h"
+#include "AbilitySystem/Effects/GE_Damage.h"
 #include "Character/ARPGCharacterBase.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
@@ -7,6 +8,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
+#include "Animation/AnimNotifyState_HitDetection.h"
 #include "Engine/OverlapResult.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Animation/AnimMontage.h"
@@ -16,6 +18,23 @@
 #include "Camera/CameraShakeBase.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+
+namespace
+{
+	/** True if the montage carries a hit-detection notify that will fire Event.MeleeHit. */
+	bool MontageHasHitNotify(const UAnimMontage* M)
+	{
+		if (!M) return false;
+		for (const FAnimNotifyEvent& Ev : M->Notifies)
+		{
+			if (Cast<UAnimNotifyState_HitDetection>(Ev.NotifyStateClass))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+}
 
 UGA_MeleeAttack::UGA_MeleeAttack()
 {
@@ -35,6 +54,10 @@ UGA_MeleeAttack::UGA_MeleeAttack()
 	// authored none; StartMontageAndListenForCombo also swaps in a real attack montage when
 	// the assigned one is the empty AM_MeleeCombo placeholder, so a bare setup still swings.
 	ComboSectionNames.Add(FName("Default"));
+
+	// Default damage GE so a bare C++ grant (no Blueprint subclass) still lands damage —
+	// mirrors GA_EnemyMeleeAttack. A Blueprint subclass may override this.
+	DamageEffect = UGE_Damage::StaticClass();
 }
 
 bool UGA_MeleeAttack::CanActivateAbility(
@@ -66,6 +89,7 @@ void UGA_MeleeAttack::ActivateAbility(
 	// If it fails, Super will EndAbility with bWasCancelled=true.
 	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[GA_MeleeAttack] CommitAbility FAILED (cost/cooldown) — no swing"));
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
@@ -74,6 +98,8 @@ void UGA_MeleeAttack::ActivateAbility(
 	if (AARPGCharacterBase* Character = GetARPGCharacter())
 	{
 		Character->SetAttacking(true);
+		UE_LOG(LogTemp, Log, TEXT("[GA_MeleeAttack] ActivateAbility — swinging (riposteReady=%d)"),
+			Character->IsRiposteReady() ? 1 : 0);
 	}
 
 	// Reset combo state
@@ -148,11 +174,17 @@ void UGA_MeleeAttack::StartMontageAndListenForCombo()
 	// mid-swing offset, resolving a forward melee target itself — no hit-detection
 	// AnimNotify required. Scheduled here (before the montage branch, which may
 	// return early) so it fires whether or not a montage actually plays.
-	if (!bUseAnimationDrivenDamage)
+	// Use gray-box self-damage when the montage carries no hit-detection notify — even if the
+	// ability is configured for animation-driven damage. The code-authored slash (AM_SwordSlashC)
+	// has no notify, so without this the attack would land no damage at all.
+	const bool bEffectiveGrayBox = !bUseAnimationDrivenDamage || !MontageHasHitNotify(AttackMontage);
+	if (bEffectiveGrayBox)
 	{
 		UAbilityTask_WaitDelay* HitTask = UAbilityTask_WaitDelay::WaitDelay(this, GrayBoxHitDelay);
 		HitTask->OnFinish.AddDynamic(this, &UGA_MeleeAttack::OnGrayBoxHitWindow);
 		HitTask->ReadyForActivation();
+		UE_LOG(LogTemp, Log, TEXT("[GA_MeleeAttack] graybox scheduled (animDriven=%d hasHitNotify=%d)"),
+			bUseAnimationDrivenDamage ? 1 : 0, MontageHasHitNotify(AttackMontage) ? 1 : 0);
 	}
 
 	// Determine up-front whether the avatar can actually play an anim montage.
@@ -241,7 +273,10 @@ void UGA_MeleeAttack::OnGrayBoxHitWindow()
 	// Gray-box (bUseAnimationDrivenDamage=false): no Event.MeleeHit / notify fires,
 	// so resolve the melee target ourselves with a forward-cone search and apply
 	// the damage GE. Reuses the shared search + apply paths.
-	if (AActor* Target = FindForwardTarget(MeleeHitRange, WarpTargetSearchAngle))
+	AActor* Target = FindForwardTarget(MeleeHitRange, WarpTargetSearchAngle);
+	UE_LOG(LogTemp, Log, TEXT("[GA_MeleeAttack] GrayBox hit window: range=%.0f angle=%.0f target=%s"),
+		MeleeHitRange, WarpTargetSearchAngle, Target ? *Target->GetName() : TEXT("NONE"));
+	if (Target)
 	{
 		ApplyMeleeDamageTo(Target, nullptr);
 	}
@@ -399,8 +434,19 @@ void UGA_MeleeAttack::ApplyMeleeDamageTo(AActor* Target, const FHitResult* Optio
 		? ComboDamageMultipliers[CurrentComboIndex]
 		: 1.f;
 
+	// Riposte: a strike inside the post-parry window deals bonus damage (consumed on use).
+	float RiposteMultiplier = 1.f;
+	if (AARPGCharacterBase* Source = GetARPGCharacter())
+	{
+		if (Source->IsRiposteReady())
+		{
+			RiposteMultiplier = RiposteDamageMultiplier;
+			Source->SetRiposteReady(false);
+		}
+	}
+
 	FGameplayEffectSpec* Spec = SpecHandle.Data.Get();
-	Spec->SetSetByCallerMagnitude(ARPGGameplayTags::Data_Damage_Base, BaseDamage * ComboMultiplier);
+	Spec->SetSetByCallerMagnitude(ARPGGameplayTags::Data_Damage_Base, BaseDamage * ComboMultiplier * RiposteMultiplier);
 	Spec->AddDynamicAssetTag(ARPGGameplayTags::Damage_Physical);
 
 	SourceASC->ApplyGameplayEffectSpecToTarget(*Spec, TargetASC);
@@ -408,8 +454,8 @@ void UGA_MeleeAttack::ApplyMeleeDamageTo(AActor* Target, const FHitResult* Optio
 	// Confirmed hit — fire the combat-feel polish (hit pause + camera shake).
 	ApplyHitFeel();
 
-	UE_LOG(LogTemp, Log, TEXT("[GA_MeleeAttack] Applied damage to %s: Base=%.1f x Combo=%.2f"),
-		*Target->GetName(), BaseDamage, ComboMultiplier);
+	UE_LOG(LogTemp, Log, TEXT("[GA_MeleeAttack] Applied damage to %s: Base=%.1f x Combo=%.2f x Riposte=%.2f"),
+		*Target->GetName(), BaseDamage, ComboMultiplier, RiposteMultiplier);
 }
 
 void UGA_MeleeAttack::OnMeleeHit(FGameplayEventData Payload)

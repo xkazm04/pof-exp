@@ -168,6 +168,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Combat|Parry")
 	void SetParrying(bool bNewParrying) { bIsParrying = bNewParrying; }
 
+	/** Whether the character is staggered and cannot act (read by AI; set on a parry stun). */
+	UFUNCTION(BlueprintPure, Category = "Combat|Stagger")
+	bool IsStaggered() const { return bIsStaggered; }
+
+	UFUNCTION(BlueprintCallable, Category = "Combat|Stagger")
+	void SetStaggered(bool bNewStaggered) { bIsStaggered = bNewStaggered; }
+
+	/** Whether a riposte (bonus counter) is available, opened by a successful parry. */
+	UFUNCTION(BlueprintPure, Category = "Combat|Parry")
+	bool IsRiposteReady() const { return bRiposteReady; }
+
+	UFUNCTION(BlueprintCallable, Category = "Combat|Parry")
+	void SetRiposteReady(bool bNewReady) { bRiposteReady = bNewReady; }
+
 	/** Whether the combo input window is currently open. */
 	UFUNCTION(BlueprintPure, Category = "Combat|Combo")
 	bool IsComboWindowOpen() const { return bComboWindowOpen; }
@@ -615,6 +629,10 @@ protected:
 	/** True while a saber parry/block is active (set by GA_Parry). */
 	UPROPERTY(BlueprintReadOnly, Category = "Combat|Parry")
 	bool bIsParrying = false;
+
+	/** True while a riposte (bonus counter) is available after a successful parry. */
+	UPROPERTY(BlueprintReadOnly, Category = "Combat|Parry")
+	bool bRiposteReady = false;
 
 	/** Set to true to block movement during stagger. */
 	UPROPERTY(BlueprintReadWrite, Category = "Movement|State")

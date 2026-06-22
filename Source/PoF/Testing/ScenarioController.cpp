@@ -1,6 +1,7 @@
 #include "ScenarioController.h"
 
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/ARPGAttributeSet.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimationAsset.h"
 #include "Animation/AnimMontage.h"
@@ -439,6 +440,25 @@ void UScenarioController::DoSample(int32 Idx)
         S->SetNumberField(TEXT("health"), ReadAttr(TEXT("Health")));
         S->SetNumberField(TEXT("stamina"), ReadAttr(TEXT("Stamina")));
         S->SetNumberField(TEXT("mana"), ReadAttr(TEXT("Mana")));
+
+        // Nearest enemy's health via GAS (combat verification — parry/riposte effects).
+        // The enemy keeps Health in the AttributeSet, not a mirrored float like the player.
+        AARPGEnemyCharacter* NearestEnemy = nullptr;
+        float BestSq = MAX_FLT;
+        for (TActorIterator<AARPGEnemyCharacter> It(GetWorld()); It; ++It)
+        {
+            const float Sq = FVector::DistSquared(It->GetActorLocation(), P->GetActorLocation());
+            if (Sq < BestSq) { BestSq = Sq; NearestEnemy = *It; }
+        }
+        if (NearestEnemy)
+        {
+            if (UAbilitySystemComponent* EASC = NearestEnemy->GetAbilitySystemComponent())
+            {
+                bool bFound = false;
+                const float HP = EASC->GetGameplayAttributeValue(UARPGAttributeSet::GetHealthAttribute(), bFound);
+                if (bFound) { S->SetNumberField(TEXT("enemy_health"), HP); }
+            }
+        }
     }
     bool bPoseValid = false;
     if (USkeletalMeshComponent* Mesh = GetMesh())

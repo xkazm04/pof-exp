@@ -47,6 +47,13 @@ void AARPGSimpleAIController::Tick(float DeltaSeconds)
 		}
 	}
 
+	// Stunned (e.g. just got parried) — can't move or attack this tick. The riposte window
+	// the parry opened relies on this hesitation.
+	if (ControlledEnemy->IsStaggered())
+	{
+		return;
+	}
+
 	TimeSinceLastAttack += DeltaSeconds;
 
 	const FVector EnemyLoc = ControlledEnemy->GetActorLocation();

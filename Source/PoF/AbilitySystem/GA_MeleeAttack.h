@@ -65,6 +65,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Damage")
 	TArray<float> ComboDamageMultipliers;
 
+	/** Damage multiplier when this strike is a riposte (the attacker is IsRiposteReady() after a parry). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Damage")
+	float RiposteDamageMultiplier = 2.5f;
+
 	/**
 	 * When false (default, gray-box: an empty montage or no hit-detection notify yet),
 	 * the ability resolves its own forward melee target and applies damage at a
