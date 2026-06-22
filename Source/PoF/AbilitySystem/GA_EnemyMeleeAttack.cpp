@@ -38,6 +38,17 @@ void UGA_EnemyMeleeAttack::ActivateAbility(
 		return;
 	}
 
+	// Staggered (e.g. just got parried) — can't swing. Controller-agnostic so the parry
+	// stun works against the BT AI in PIE too, not only the harness's SimpleAI.
+	if (AARPGCharacterBase* Stunned = GetARPGCharacter())
+	{
+		if (Stunned->IsStaggered())
+		{
+			EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+			return;
+		}
+	}
+
 	if (AARPGCharacterBase* Character = GetARPGCharacter())
 	{
 		Character->SetAttacking(true);
