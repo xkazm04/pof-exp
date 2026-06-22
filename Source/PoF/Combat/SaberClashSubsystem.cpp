@@ -4,7 +4,10 @@
 #include "AbilitySystem/ARPGGameplayTags.h"
 #include "AbilitySystemComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/PointLightComponent.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/PointLight.h"
@@ -127,6 +130,19 @@ void USaberClashSubsystem::Tick(float DeltaTime)
 						AttASC->CancelAbilities(&MeleeTags);
 					}
 					Attacker->SetAttacking(false);
+
+					// Recoil flinch: the deflected attacker's saber is knocked up-and-back.
+					if (USkeletalMeshComponent* AttMesh = Attacker->GetMesh())
+					{
+						if (UAnimInstance* AttAnim = AttMesh->GetAnimInstance())
+						{
+							if (UAnimMontage* Recoil = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_Recoil.AM_Recoil")))
+							{
+								AttAnim->Montage_Play(Recoil, 1.0f);
+							}
+						}
+					}
+
 					UE_LOG(LogTemp, Display, TEXT("[SaberClash] PARRY! %s deflected %s (d=%.0f)"),
 						*Defender->GetName(), *Attacker->GetName(), D);
 				}
