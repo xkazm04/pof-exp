@@ -194,6 +194,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Combat|Weapon")
 	UStaticMeshComponent* GetWeaponMesh() const { return WeaponMesh; }
 
+	/** World-space endpoints of the saber blade (hilt->tip), derived from the weapon mesh's
+	 *  long axis. Used by the saber-clash system. Returns false if there's no visible blade. */
+	bool GetSaberSegment(FVector& OutStart, FVector& OutEnd) const;
+
 	/** Weapon mesh component (assign the StaticMesh per-Blueprint, e.g. SM_RuneSword). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|Weapon")
 	TObjectPtr<UStaticMeshComponent> WeaponMesh;

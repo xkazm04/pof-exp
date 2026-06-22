@@ -11,6 +11,7 @@
 #include "MotionWarpingComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -115,6 +116,25 @@ AARPGCharacterBase::AARPGCharacterBase()
 UAbilitySystemComponent* AARPGCharacterBase::GetAbilitySystemComponent() const
 {
 	return AbilitySystemComponent;
+}
+
+bool AARPGCharacterBase::GetSaberSegment(FVector& OutStart, FVector& OutEnd) const
+{
+	if (!WeaponMesh)
+	{
+		return false;
+	}
+	UStaticMesh* SM = WeaponMesh->GetStaticMesh();
+	if (!SM)
+	{
+		return false;
+	}
+	// The blade cylinder's long axis is local Z; its world endpoints span the mesh's Z bounds.
+	const FTransform T = WeaponMesh->GetComponentTransform();
+	const float HalfZ = SM->GetBounds().BoxExtent.Z;
+	OutStart = T.TransformPosition(FVector(0.f, 0.f, -HalfZ));
+	OutEnd = T.TransformPosition(FVector(0.f, 0.f, HalfZ));
+	return true;
 }
 
 void AARPGCharacterBase::PossessedBy(AController* NewController)
