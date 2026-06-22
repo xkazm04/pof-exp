@@ -55,17 +55,17 @@ void UGA_EnemyMeleeAttack::ActivateAbility(
 
 	// Self-heal an empty swing montage (same placeholder issue as the player melee): fall back
 	// to the real sword slash so the Sith actually SWINGS instead of doing nothing.
-	if (!SwingMontage || SwingMontage->GetPlayLength() <= 0.f)
+	// ALWAYS use the custom code-authored slash so the Sith shows it in normal play (PIE),
+	// not only when its montage is empty. Fall back to the original if the custom is missing.
+	if (UAnimMontage* Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlashC.AM_SwordSlashC")))
 	{
-		// Prefer the custom code-authored slash; fall back to the original.
-		UAnimMontage* Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlashC.AM_SwordSlashC"));
-		if (!Slash)
+		SwingMontage = Slash;
+	}
+	else if (!SwingMontage || SwingMontage->GetPlayLength() <= 0.f)
+	{
+		if (UAnimMontage* Fallback = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlash.AM_SwordSlash")))
 		{
-			Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlash.AM_SwordSlash"));
-		}
-		if (Slash)
-		{
-			SwingMontage = Slash;
+			SwingMontage = Fallback;
 		}
 	}
 
