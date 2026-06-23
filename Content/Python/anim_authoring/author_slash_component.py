@@ -12,20 +12,42 @@ import pose_engine as pe
 
 CHAIN = ["root", "pelvis", "spine_01", "spine_02", "spine_03", "spine_04", "spine_05",
          "clavicle_r", "upperarm_r", "lowerarm_r", "hand_r"]
-PARENT = {"upperarm_r": "clavicle_r", "lowerarm_r": "upperarm_r", "hand_r": "lowerarm_r",
-          "spine_03": "spine_02", "spine_04": "spine_03"}
+# Every bone's parent is its predecessor in the chain (the real Manny hierarchy), so any
+# bone we animate — pelvis + the whole spine, not just the arm — resolves to local space.
+PARENT = {CHAIN[i]: CHAIN[i - 1] for i in range(1, len(CHAIN))}
 FPS = 30
 
-# (time, {bone: (raise=pitch, sweep=yaw, twist=roll) component deltas deg})  POLISHED:
-# torso coils right then uncoils left through the strike, bows forward into the blow (weight),
-# wrist snaps on impact; slow anticipation, fast 0.10s strike.
+# (time, {bone: (raise=pitch, sweep=yaw, twist=roll) deg}, ease)  WEIGHTED, FULL-BODY:
+# the VLM ruler flagged the arm-only version (WARN 54: "arm lift, stiff core, no snap, even
+# timing"). Fix = drive the WHOLE torso + hips (coil right -> explosive uncoil left, bow
+# forward into the blow) and ACCELERATE into a fast 0.10s strike (ease "in" = the snap),
+# with a settle overshoot on recovery. +yaw=right, -yaw=left; +pitch=raise/lean-back.
 SLASH = [
-    (0.00, {"upperarm_r": (20, 5, 0), "lowerarm_r": (10, 0, 0)}),
-    (0.30, {"upperarm_r": (145, 30, 15), "lowerarm_r": (75, 0, 0), "spine_04": (5, 20, 0)}),    # windup: cock up-back, coil right, load back
-    (0.42, {"upperarm_r": (25, -30, 0), "lowerarm_r": (12, 0, 0),
-            "spine_04": (-12, -18, 0), "hand_r": (0, 0, 35)}),                                   # strike: FAST chop down, uncoil+lean, wrist snap
-    (0.58, {"upperarm_r": (-8, -55, -10), "lowerarm_r": (5, 0, 0), "spine_04": (-8, -25, 0)}),   # follow: low across-left, leaned in
-    (1.20, {"upperarm_r": (20, 5, 0), "lowerarm_r": (10, 0, 0)}),                                # recover/settle
+    (0.00, {"upperarm_r": (20, 5, 0), "lowerarm_r": (10, 0, 0)}, "smooth"),
+    # WINDUP: cock arm up-back-right; coil the whole torso right + load weight back. Hold = anticipation.
+    (0.32, {
+        "upperarm_r": (150, 38, 18), "lowerarm_r": (82, 0, 0),
+        "pelvis": (0, 8, 0),
+        "spine_01": (3, 8, 0), "spine_02": (3, 10, 0), "spine_03": (4, 11, 0), "spine_04": (4, 13, 0),
+    }, "out"),
+    # STRIKE: explosive uncoil — torso rotates hard LEFT + bows FORWARD, hips drive, arm chops, wrist snaps.
+    (0.42, {
+        "upperarm_r": (28, -32, 0), "lowerarm_r": (14, 0, 0), "hand_r": (0, 0, 44),
+        "pelvis": (0, -8, 0),
+        "spine_01": (-3, -10, 0), "spine_02": (-4, -13, 0), "spine_03": (-6, -15, 0), "spine_04": (-9, -18, 0),
+    }, "in"),
+    # FOLLOW-THROUGH: blade carries low across-left, torso fully rotated through, weight forward.
+    (0.60, {
+        "upperarm_r": (-6, -58, -10), "lowerarm_r": (6, 0, 0),
+        "pelvis": (0, -10, 0),
+        "spine_01": (-4, -9, 0), "spine_02": (-5, -12, 0), "spine_03": (-7, -15, 0), "spine_04": (-10, -20, 0),
+    }, "smooth"),
+    # SETTLE: small overshoot past neutral, then ease home (secondary motion, not a dead stop).
+    (0.86, {
+        "upperarm_r": (30, 11, 0), "lowerarm_r": (15, 0, 0),
+        "pelvis": (0, -2, 0), "spine_02": (1, -3, 0), "spine_03": (1, -3, 0),
+    }, "smooth"),
+    (1.20, {"upperarm_r": (20, 5, 0), "lowerarm_r": (10, 0, 0)}, "out"),
 ]
 
 
@@ -44,26 +66,31 @@ def comp_rots():
     return out
 
 
-def _ease(a):
+def _ease(a, mode):
     a = 0.0 if a < 0 else (1.0 if a > 1 else a)
-    return a * a * (3.0 - 2.0 * a)
+    if mode == "in":
+        return a * a * a                      # accelerate (slow->fast): the strike snap
+    if mode == "out":
+        return 1.0 - (1.0 - a) ** 3           # decelerate (fast->slow): anticipation hold / settle
+    return a * a * (3.0 - 2.0 * a)            # smoothstep
 
 
 def main():
     CR = comp_rots()
     skel, names, base = pe.load_base_pose()
     bones = set()
-    for _, p in SLASH:
-        bones.update(p.keys())
+    for kp in SLASH:
+        bones.update(kp[1].keys())
 
     def pose_at(t):
         seg = 0
         for i in range(len(SLASH) - 1):
             if t >= SLASH[i][0]:
                 seg = i
-        t0, p0 = SLASH[seg]
-        t1, p1 = SLASH[min(seg + 1, len(SLASH) - 1)]
-        a = _ease((t - t0) / max(t1 - t0, 1e-5))
+        t0, p0 = SLASH[seg][0], SLASH[seg][1]
+        nxt = SLASH[min(seg + 1, len(SLASH) - 1)]
+        t1, p1, mode = nxt[0], nxt[1], nxt[2]
+        a = _ease((t - t0) / max(t1 - t0, 1e-5), mode)
         out = {}
         for b in bones:
             v0 = p0.get(b, (0, 0, 0)); v1 = p1.get(b, (0, 0, 0))
