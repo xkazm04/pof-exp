@@ -13,6 +13,7 @@ class UCurveFloat;
 class UCurveTable;
 class UDataTable;
 class UMotionWarpingComponent;
+class UPhysicalAnimationComponent;
 class UStaticMeshComponent;
 
 /** Dodge direction relative to character facing. */
@@ -336,6 +337,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Combat|HitReact")
 	UAnimMontage* GetHitReactMontage() const { return HitReactMontage; }
 
+	/**
+	 * Brief physics hit-reaction: blends the UPPER body (HitReactRootBone and below) into
+	 * physical animation, kicks it with an impulse along HitDirection, then springs it back to
+	 * the animated pose over HitReactDuration. The legs stay animated so the character doesn't
+	 * fall over. Gives the real impact weight authored / code-FK montages can't.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Combat|HitReact")
+	void PhysicalHitReaction(const FVector& HitDirection, float Strength = 1.0f);
+
+	UFUNCTION(BlueprintPure, Category = "Combat|HitReact")
+	bool IsPhysicsHitReacting() const { return bPhysicsHitReactActive; }
+
 	/** Enable ragdoll physics on the skeletal mesh. */
 	UFUNCTION(BlueprintCallable, Category = "Combat|Death")
 	void EnableRagdoll();
@@ -449,6 +462,28 @@ protected:
 	// --- Motion Warping ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|MotionWarping")
 	TObjectPtr<UMotionWarpingComponent> MotionWarpingComp;
+
+	// --- Physics hit-reaction ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|HitReact")
+	TObjectPtr<UPhysicalAnimationComponent> PhysicalAnimation;
+
+	/** Simulate this bone and below for the flinch (upper body — keeps the legs animated). */
+	UPROPERTY(EditAnywhere, Category = "Combat|HitReact|Physics")
+	FName HitReactRootBone = TEXT("spine_01");
+
+	/** Impulse magnitude kicked into the upper body along the hit direction (velocity change). */
+	UPROPERTY(EditAnywhere, Category = "Combat|HitReact|Physics")
+	float HitReactImpulse = 16000.f;
+
+	/** Seconds the upper body stays in physical animation before snapping back to pure anim. */
+	UPROPERTY(EditAnywhere, Category = "Combat|HitReact|Physics")
+	float HitReactDuration = 0.35f;
+
+	/** End the physics flinch — blend physics out and stop simulating. */
+	void EndPhysicalHitReaction();
+
+	FTimerHandle HitReactPhysicsTimer;
+	bool bPhysicsHitReactActive = false;
 
 	// --- Camera ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")

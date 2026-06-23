@@ -1,9 +1,27 @@
 #include "AbilitySystem/ARPGAttributeSet.h"
 #include "AbilitySystem/ARPGGameplayTags.h"
 #include "Player/ARPGPlayerCharacter.h"
+#include "Character/ARPGCharacterBase.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayEffectExtension.h"
 #include "GameplayCueManager.h"
+
+namespace
+{
+	/** Kick the damaged character's upper body away from the attacker (physics flinch). */
+	void TriggerPhysicsFlinch(AActor* InstigatorActor, AActor* TargetActor)
+	{
+		AARPGCharacterBase* HitChar = Cast<AARPGCharacterBase>(TargetActor);
+		if (!HitChar) return;
+		FVector HitDir = -HitChar->GetActorForwardVector(); // fallback: shoved backward
+		if (InstigatorActor)
+		{
+			const FVector Delta = HitChar->GetActorLocation() - InstigatorActor->GetActorLocation();
+			if (!Delta.IsNearlyZero()) { HitDir = Delta.GetSafeNormal(); }
+		}
+		HitChar->PhysicalHitReaction(HitDir, 1.0f);
+	}
+}
 
 FOnDamageNumberRequestedNative UARPGAttributeSet::OnDamageNumberRequestedGlobal;
 
@@ -216,6 +234,9 @@ void UARPGAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
 					HitReactPayload.EventMagnitude = -DamageAmount;
 					OwnerASC->HandleGameplayEvent(ARPGGameplayTags::Event_HitReact, &HitReactPayload);
 				}
+				// Physics flinch: kick the upper body away from the attacker (impact weight the
+				// absent/code-FK hit-react montage can't provide).
+				TriggerPhysicsFlinch(Instigator, TargetActor);
 			}
 		}
 
@@ -328,6 +349,7 @@ void UARPGAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
 					HitReactPayload.EventMagnitude = Data.EvaluatedData.Magnitude;
 					OwnerASC->HandleGameplayEvent(ARPGGameplayTags::Event_HitReact, &HitReactPayload);
 				}
+				TriggerPhysicsFlinch(Instigator, TargetActor);
 			}
 		}
 	}

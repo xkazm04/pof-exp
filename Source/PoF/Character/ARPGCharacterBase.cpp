@@ -9,6 +9,8 @@
 #include "Curves/CurveFloat.h"
 #include "Engine/CurveTable.h"
 #include "MotionWarpingComponent.h"
+#include "PhysicsEngine/PhysicalAnimationComponent.h"
+#include "PhysicsEngine/PhysicsAsset.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -95,6 +97,9 @@ AARPGCharacterBase::AARPGCharacterBase()
 
 	// --- Motion Warping ---
 	MotionWarpingComp = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
+
+	// --- Physics hit-reaction (drives the upper body toward the pose, so it can flinch) ---
+	PhysicalAnimation = CreateDefaultSubobject<UPhysicalAnimationComponent>(TEXT("PhysicalAnimation"));
 
 	// --- Ability System ---
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
@@ -195,6 +200,23 @@ void AARPGCharacterBase::BeginPlay()
 	// Re-attach the weapon with the (possibly per-Blueprint-edited) bone. KeepRelative —
 	// Snap rules ZERO the relative transform, stomping the grip rotation authored on the
 	// component template. WeaponGripOffset only overrides when explicitly set (non-identity).
+	// The Manny mesh ships with NO physics asset, so its bodies can't simulate for hit-reactions.
+	// Assign the generated one (project content) at runtime — applies to player + enemy alike.
+	if (USkeletalMeshComponent* M = GetMesh())
+	{
+		if (!M->GetPhysicsAsset())
+		{
+			if (UPhysicsAsset* PA = LoadObject<UPhysicsAsset>(nullptr, TEXT("/Game/Characters/Player/PA_VSPlayer.PA_VSPlayer")))
+			{
+				M->SetPhysicsAsset(PA);
+			}
+		}
+		if (PhysicalAnimation)
+		{
+			PhysicalAnimation->SetSkeletalMeshComponent(M);
+		}
+	}
+
 	if (WeaponMesh && GetMesh())
 	{
 		WeaponMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, WeaponAttachBone);
@@ -896,6 +918,52 @@ void AARPGCharacterBase::InitializeAttributes()
 // =========================================================================
 // Death
 // =========================================================================
+
+void AARPGCharacterBase::PhysicalHitReaction(const FVector& HitDirection, float Strength)
+{
+	if (IsDead()) return;
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (!MeshComp || !PhysicalAnimation || !MeshComp->GetPhysicsAsset()) return;
+
+	// Enable physics collision so the bodies simulate, then sim the UPPER body (spine_01 and
+	// below it in the hierarchy = chest/arms/head; the pelvis + legs stay animated/planted).
+	MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	MeshComp->SetAllBodiesBelowSimulatePhysics(HitReactRootBone, true, /*bIncludeSelf=*/true);
+	MeshComp->SetAllBodiesBelowPhysicsBlendWeight(HitReactRootBone, 1.0f, /*bSkipCustomPhysicsType=*/false, /*bIncludeSelf=*/true);
+
+	// Spring the simulated bodies back toward the animated pose so the upper body DEFLECTS
+	// from the impulse then recovers — a flinch, not a ragdoll collapse.
+	FPhysicalAnimationData Profile;
+	Profile.bIsLocalSimulation = false;
+	Profile.OrientationStrength = 350.f;
+	Profile.AngularVelocityStrength = 25.f;
+	Profile.PositionStrength = 350.f;
+	Profile.VelocityStrength = 25.f;
+	Profile.MaxLinearForce = 0.f;   // 0 = unlimited
+	Profile.MaxAngularForce = 0.f;
+	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(HitReactRootBone, Profile, /*bIncludeSelf=*/true);
+
+	// Kick every simulating upper-body body along the hit direction (mass-independent).
+	const FVector Impulse = HitDirection.GetSafeNormal() * HitReactImpulse * FMath::Clamp(Strength, 0.5f, 2.0f);
+	MeshComp->AddImpulseToAllBodiesBelow(Impulse, HitReactRootBone, /*bVelChange=*/true, /*bIncludeSelf=*/true);
+
+	bPhysicsHitReactActive = true;
+	GetWorldTimerManager().ClearTimer(HitReactPhysicsTimer);
+	GetWorldTimerManager().SetTimer(HitReactPhysicsTimer, this, &AARPGCharacterBase::EndPhysicalHitReaction, HitReactDuration, false);
+
+	UE_LOG(LogTemp, Verbose, TEXT("[HitReact] physics flinch on %s dir=%s"), *GetName(), *HitDirection.GetSafeNormal().ToString());
+}
+
+void AARPGCharacterBase::EndPhysicalHitReaction()
+{
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->SetAllBodiesBelowPhysicsBlendWeight(HitReactRootBone, 0.0f, false, true);
+		MeshComp->SetAllBodiesBelowSimulatePhysics(HitReactRootBone, false, true);
+		MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	}
+	bPhysicsHitReactActive = false;
+}
 
 void AARPGCharacterBase::EnableRagdoll()
 {
