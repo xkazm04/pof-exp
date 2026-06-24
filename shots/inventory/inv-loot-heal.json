@@ -1,0 +1,14 @@
+{
+  "out_dir": "C:/Users/kazda/Documents/Unreal Projects/PoF-inventory/Saved/Observations/inv",
+  "total_seconds": 4.0,
+  "num_samples": 8,
+  "settle": 0.5,
+  "disable_ai": true,
+  "start_health": 50,
+  "show_inventory_ui": true,
+  "inputs": [
+    { "event": "loot_chest", "start": 0.3, "duration": 0.1 },
+    { "event": "collect_loot", "start": 1.2, "duration": 0.1 },
+    { "event": "use_item", "start": 2.6, "duration": 0.1 }
+  ]
+}

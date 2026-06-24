@@ -38,6 +38,18 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "UObject/UnrealType.h"
+#include "Inventory/ARPGInventoryComponent.h"
+#include "Inventory/ARPGItemInstance.h"
+#include "Inventory/ARPGItemDefinition.h"
+#include "Loot/ARPGLootChest.h"
+#include "Loot/ARPGWorldItem.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "Widgets/SBoxPanel.h"
+#include "Widgets/SOverlay.h"
+#include "Widgets/Layout/SBorder.h"
+#include "Widgets/Text/STextBlock.h"
+#include "Styling/CoreStyle.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPoFScenario, Log, All);
 
@@ -90,6 +102,8 @@ bool UScenarioController::LoadScenario(const FString& Path)
     Root->TryGetBoolField(TEXT("disable_ai"), bDisableAI);
     Root->TryGetBoolField(TEXT("simple_enemy_ai"), bSimpleEnemyAI);
     Root->TryGetBoolField(TEXT("melee_engage"), bMeleeEngage);
+    if (Root->TryGetNumberField(TEXT("start_health"), D)) StartHealth = (float)D;
+    Root->TryGetBoolField(TEXT("show_inventory_ui"), bShowInventoryUI);
 
     const TArray<TSharedPtr<FJsonValue>>* InArr = nullptr;
     if (Root->TryGetArrayField(TEXT("inputs"), InArr))
@@ -277,6 +291,152 @@ void UScenarioController::EngageNearestEnemy()
         *Best->GetName(), Range * 0.6f, Range);
 }
 
+UARPGInventoryComponent* UScenarioController::GetPlayerInventory() const
+{
+    if (APawn* P = GetPawn())
+    {
+        return P->FindComponentByClass<UARPGInventoryComponent>();
+    }
+    return nullptr;
+}
+
+void UScenarioController::SetStartHealth()
+{
+    if (StartHealth < 0.f) return;
+    if (APawn* P = GetPawn())
+    {
+        if (UAbilitySystemComponent* ASC = P->FindComponentByClass<UAbilitySystemComponent>())
+        {
+            // Set the GAS base (the source of truth); the player's mirrored float Health + the
+            // heal GE both flow through GAS, so the 50->100 measurement stays consistent.
+            ASC->SetNumericAttributeBase(UARPGAttributeSet::GetHealthAttribute(), StartHealth);
+            UE_LOG(LogPoFScenario, Display, TEXT("[scenario] start_health -> %.0f"), StartHealth);
+        }
+    }
+}
+
+void UScenarioController::HandleLootChest()
+{
+    UWorld* W = GetWorld();
+    APawn* P = GetPawn();
+    if (!W || !P) return;
+    AARPGLootChest* Best = nullptr;
+    float BestSq = MAX_FLT;
+    for (TActorIterator<AARPGLootChest> It(W); It; ++It)
+    {
+        const float Sq = FVector::DistSquared(It->GetActorLocation(), P->GetActorLocation());
+        if (Sq < BestSq) { BestSq = Sq; Best = *It; }
+    }
+    if (Best)
+    {
+        const bool bOpened = Best->TryOpen(P);
+        UE_LOG(LogPoFScenario, Display, TEXT("[scenario] loot_chest: opened %s -> %d"), *Best->GetName(), bOpened ? 1 : 0);
+    }
+    else
+    {
+        UE_LOG(LogPoFScenario, Warning, TEXT("[scenario] loot_chest: no AARPGLootChest in world"));
+    }
+}
+
+void UScenarioController::HandleCollectLoot()
+{
+    UWorld* W = GetWorld();
+    APawn* P = GetPawn();
+    if (!W || !P) return;
+    const FVector PLoc = P->GetActorLocation();
+    // Deterministically collect the chest's dropped world items into the player's inventory
+    // (the chest set bSliceMode=false on them, so TryPickup routes through AddItem). This mirrors
+    // the harness's melee_engage philosophy: place/collect for determinism instead of relying on
+    // physics overlap + auto-pickup timing in a headless run.
+    TArray<AARPGWorldItem*> Items;
+    for (TActorIterator<AARPGWorldItem> It(W); It; ++It) { Items.Add(*It); }
+    int32 Collected = 0;
+    for (AARPGWorldItem* WI : Items)
+    {
+        if (!WI) continue;
+        if (FVector::Dist(WI->GetActorLocation(), PLoc) > 800.f) continue;
+        if (WI->TryPickup(P)) { ++Collected; }
+    }
+    UE_LOG(LogPoFScenario, Display, TEXT("[scenario] collect_loot: picked up %d world item(s) into inventory"), Collected);
+}
+
+void UScenarioController::HandleUseItem()
+{
+    if (UARPGInventoryComponent* Inv = GetPlayerInventory())
+    {
+        const bool bUsed = Inv->UseFirstConsumable();
+        UE_LOG(LogPoFScenario, Display, TEXT("[scenario] use_item: UseFirstConsumable -> %d"), bUsed ? 1 : 0);
+    }
+}
+
+void UScenarioController::EnsureInventoryUI()
+{
+    if (bInvUIAdded || !GEngine || !GEngine->GameViewport) return;
+    SAssignNew(InvUIList, SVerticalBox);
+    TSharedRef<SWidget> Panel =
+        SNew(SBorder)
+        .BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
+        .BorderBackgroundColor(FLinearColor(0.f, 0.f, 0.f, 0.85f))
+        .Padding(FMargin(20.f))
+        [
+            SNew(SVerticalBox)
+            + SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))
+            [
+                SNew(STextBlock)
+                .Text(FText::FromString(TEXT("INVENTORY")))
+                .Font(FCoreStyle::GetDefaultFontStyle("Bold", 30))
+                .ColorAndOpacity(FLinearColor(1.f, 0.85f, 0.2f, 1.f))
+            ]
+            + SVerticalBox::Slot().AutoHeight()
+            [
+                InvUIList.ToSharedRef()
+            ]
+        ];
+    GEngine->GameViewport->AddViewportWidgetContent(
+        SNew(SOverlay)
+        + SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(FMargin(50.f))
+        [
+            Panel
+        ]);
+    bInvUIAdded = true;
+    RefreshInventoryUI();
+    UE_LOG(LogPoFScenario, Display, TEXT("[scenario] inventory UI overlay added to viewport"));
+}
+
+void UScenarioController::RefreshInventoryUI()
+{
+    if (!InvUIList.IsValid()) return;
+    InvUIList->ClearChildren();
+    int32 N = 0;
+    if (UARPGInventoryComponent* Inv = GetPlayerInventory())
+    {
+        for (UARPGItemInstance* Item : Inv->GetAllItems())
+        {
+            if (!Item || !Item->Definition) continue;
+            const FString Row = FString::Printf(TEXT("%s   x%d"),
+                *Item->Definition->DisplayName.ToString(), Item->StackCount);
+            InvUIList->AddSlot().AutoHeight().Padding(FMargin(2.f))
+            [
+                SNew(STextBlock)
+                .Text(FText::FromString(Row))
+                .Font(FCoreStyle::GetDefaultFontStyle("Regular", 26))
+                .ColorAndOpacity(FLinearColor::White)
+            ];
+            ++N;
+        }
+    }
+    if (N == 0)
+    {
+        InvUIList->AddSlot().AutoHeight().Padding(FMargin(2.f))
+        [
+            SNew(STextBlock)
+            .Text(FText::FromString(TEXT("(empty)")))
+            .Font(FCoreStyle::GetDefaultFontStyle("Italic", 22))
+            .ColorAndOpacity(FLinearColor(0.7f, 0.7f, 0.7f, 1.f))
+        ];
+    }
+}
+
 void UScenarioController::Begin()
 {
     bStarted = true;
@@ -308,6 +468,11 @@ void UScenarioController::Begin()
                 UE_LOG(LogPoFScenario, Display, TEXT("[scenario] force-play anim %s"), *PlayAnim);
             }
         }
+    }
+    SetStartHealth();
+    if (bShowInventoryUI)
+    {
+        EnsureInventoryUI();
     }
     UE_LOG(LogPoFScenario, Display, TEXT("[scenario] BEGIN (pawn possessed, settled)"));
 }
@@ -394,6 +559,10 @@ void UScenarioController::ApplyInputs()
                 }
             }
         }
+        // --- Inventory stream events (rising-edge, additive) ---
+        if (In.Event == TEXT("loot_chest") && bNow && !bWas) { HandleLootChest(); }
+        if (In.Event == TEXT("collect_loot") && bNow && !bWas) { HandleCollectLoot(); }
+        if (In.Event == TEXT("use_item") && bNow && !bWas) { HandleUseItem(); }
         if (WasActive.IsValidIndex(i)) WasActive[i] = bNow;
     }
 }
@@ -454,6 +623,34 @@ void UScenarioController::DoSample(int32 Idx)
         S->SetNumberField(TEXT("health"), ReadAttr(TEXT("Health")));
         S->SetNumberField(TEXT("stamina"), ReadAttr(TEXT("Stamina")));
         S->SetNumberField(TEXT("mana"), ReadAttr(TEXT("Mana")));
+
+        // Authoritative GAS Health cross-check (independent of the mirrored float above) — the
+        // ground-truth the heal proof gates on.
+        if (UAbilitySystemComponent* PASC = P->FindComponentByClass<UAbilitySystemComponent>())
+        {
+            bool bHF = false;
+            const float HP = PASC->GetGameplayAttributeValue(UARPGAttributeSet::GetHealthAttribute(), bHF);
+            if (bHF) { S->SetNumberField(TEXT("health_gas"), HP); }
+        }
+
+        // --- Inventory stream observations: contents + has_potion ---
+        if (UARPGInventoryComponent* Inv = P->FindComponentByClass<UARPGInventoryComponent>())
+        {
+            S->SetNumberField(TEXT("inventory_count"), Inv->GetItemCount());
+            TArray<TSharedPtr<FJsonValue>> InvArr;
+            bool bHasPotion = false;
+            for (UARPGItemInstance* Item : Inv->GetAllItems())
+            {
+                if (!Item || !Item->Definition) { continue; }
+                TSharedPtr<FJsonObject> IO = MakeShared<FJsonObject>();
+                IO->SetStringField(TEXT("name"), Item->Definition->DisplayName.ToString());
+                IO->SetNumberField(TEXT("count"), Item->StackCount);
+                InvArr.Add(MakeShared<FJsonValueObject>(IO));
+                if (Item->Definition->Type == EARPGItemType::Consumable) { bHasPotion = true; }
+            }
+            S->SetArrayField(TEXT("inventory"), InvArr);
+            S->SetBoolField(TEXT("has_potion"), bHasPotion);
+        }
 
         // Nearest enemy's health via GAS (combat verification — parry/riposte effects).
         // The enemy keeps Health in the AttributeSet, not a mirrored float like the player.
@@ -524,6 +721,7 @@ void UScenarioController::DoSample(int32 Idx)
     }
     S->SetBoolField(TEXT("pose_valid"), bPoseValid);
     S->SetStringField(TEXT("frame"), CaptureFrame(Idx));
+    if (bShowInventoryUI) { RefreshInventoryUI(); }
     CaptureViewport(Idx);
     SamplesJson.Add(MakeShared<FJsonValueObject>(S));
     UE_LOG(LogPoFScenario, Display, TEXT("[scenario] sample %d t=%.2f"), Idx, ScnTime);
@@ -578,7 +776,7 @@ void UScenarioController::CaptureViewport(int32 Idx)
     // world render exactly as they do in play (SceneCapture2D rendered them black/edge-on). The
     // request is serviced at end-of-frame, so the PNG appears ~1 tick later (well before DONE).
     const FString Path = FPaths::Combine(OutDir, FString::Printf(TEXT("shot_%02d.png"), Idx));
-    FScreenshotRequest::RequestScreenshot(Path, /*bShowUI=*/false, /*bAddFilenameSuffix=*/false);
+    FScreenshotRequest::RequestScreenshot(Path, /*bShowUI=*/bShowInventoryUI, /*bAddFilenameSuffix=*/false);
     UE_LOG(LogPoFScenario, Display, TEXT("[scenario] viewport screenshot requested -> %s"), *Path);
 }
 
