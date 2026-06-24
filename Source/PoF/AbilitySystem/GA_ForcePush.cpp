@@ -11,6 +11,9 @@
 #include "Engine/World.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/AnimInstance.h"
+#include "Components/SkeletalMeshComponent.h"
 
 UGA_ForcePush::UGA_ForcePush()
 {
@@ -41,6 +44,23 @@ void UGA_ForcePush::ActivateAbility(
 	}
 
 	ApplyForcePush();
+
+	// Play the believable force-push body animation (mocap, retargeted onto Manny).
+	// Fire-and-forget on the mesh AnimInstance so it survives this ability's immediate
+	// EndAbility (the push effect itself is instant; the montage is the visual).
+	if (UAnimMontage* PushMontage = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Anims/Jedi/AM_JediForcePush.AM_JediForcePush")))
+	{
+		if (ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+		{
+			if (USkeletalMeshComponent* Mesh = AvatarChar->GetMesh())
+			{
+				if (UAnimInstance* AnimInst = Mesh->GetAnimInstance())
+				{
+					AnimInst->Montage_Play(PushMontage, 1.0f);
+				}
+			}
+		}
+	}
 
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 }
