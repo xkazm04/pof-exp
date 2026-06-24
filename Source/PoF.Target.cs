@@ -11,7 +11,10 @@ public class PoFTarget : TargetRules
 		// modified settings onto the shared environment instead.
 		bOverrideBuildEnvironment = true;
 		DefaultBuildSettings = BuildSettingsVersion.Latest;
-		IncludeOrderVersion = EngineIncludeOrderVersion.Latest;
+		// Pinned during the 5.7->5.8 upgrade: 5.8's Latest (Unreal5_8) tightens
+		// IWYU include-order enforcement. Hold at Unreal5_7 to preserve the
+		// behavior the code already builds against; do IWYU cleanup separately.
+		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_7;
 		ExtraModuleNames.AddRange(new string[] { "PoF" });
 
 		// Shipping hardening

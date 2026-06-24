@@ -407,8 +407,22 @@ void UScenarioController::DoSample(int32 Idx)
     {
         if (USkeletalMeshComponent* Mesh = GetMesh())
         {
-            if (UAnimSingleNodeInstance* SN = Mesh->GetSingleNodeInstance())
+            // The gameplay AnimBP can re-assert AnimationBlueprint mode after BEGIN, dropping the
+            // single-node instance -> the scrub silently no-ops and every sample renders the same
+            // idle pose (saber-in-hand idle). Re-establish single-node here if it was lost.
+            UAnimSingleNodeInstance* SN = Mesh->GetSingleNodeInstance();
+            if (!SN)
             {
+                if (UAnimationAsset* Anim = LoadObject<UAnimationAsset>(nullptr, *PlayAnim))
+                {
+                    Mesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+                    Mesh->PlayAnimation(Anim, false);
+                    SN = Mesh->GetSingleNodeInstance();
+                }
+            }
+            if (SN)
+            {
+                SN->SetPlaying(false); // hold the scrubbed frame; don't let real-time playback drift it
                 const float Len = SN->GetLength();
                 SN->SetPosition((Len > 0.f) ? FMath::Fmod(ScnTime, Len) : ScnTime, false);
                 Mesh->TickAnimation(0.f, false);

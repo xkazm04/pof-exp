@@ -1,8 +1,9 @@
+#include "Test/Economy/VSCurrencyWalletTest.h"
+
 #include "Misc/AutomationTest.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-#include "Test/Economy/VSCurrencyWalletTest.h"
 #include "Economy/ARPGWalletComponent.h"
 #include "Economy/ARPGCurrencyTypes.h"
 
