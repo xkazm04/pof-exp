@@ -71,7 +71,7 @@ void AARPGWorldItem::BeginPlay()
 	}
 }
 
-void AARPGWorldItem::InitFromItemInstance(UARPGItemInstance* InInstance)
+void AARPGWorldItem::InitFromItemInstance(UARPGItemInstance* InInstance, bool bRouteToInventory)
 {
 	if (!InInstance || !InInstance->Definition)
 	{
@@ -79,6 +79,10 @@ void AARPGWorldItem::InitFromItemInstance(UARPGItemInstance* InInstance)
 	}
 
 	ItemInstance = InInstance;
+
+	// Loot routed from a chest goes into the looter's inventory; the vertical-slice
+	// default (VFX-and-destroy) stays in effect for every other spawn path.
+	bSliceMode = !bRouteToInventory;
 
 	// Set mesh from definition
 	if (InInstance->Definition->WorldMesh)

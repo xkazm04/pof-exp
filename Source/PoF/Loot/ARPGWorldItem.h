@@ -34,9 +34,12 @@ class POF_API AARPGWorldItem : public AActor
 public:
 	AARPGWorldItem();
 
-	/** Initialize this world item with an item instance. Call after spawning. */
+	/** Initialize this world item with an item instance. Call after spawning.
+	 *  @param bRouteToInventory  If true, this item routes pickups into the looter's
+	 *         UARPGInventoryComponent (sets bSliceMode=false). Default false preserves
+	 *         the vertical-slice VFX-and-destroy pickup for all existing callers. */
 	UFUNCTION(BlueprintCallable, Category = "Loot")
-	void InitFromItemInstance(UARPGItemInstance* InInstance);
+	void InitFromItemInstance(UARPGItemInstance* InInstance, bool bRouteToInventory = false);
 
 	/** Get the item instance this world item holds. */
 	UFUNCTION(BlueprintPure, Category = "Loot")

@@ -9,6 +9,9 @@ class USkeletalMeshComponent;
 class UAnimMontage;
 class FJsonObject;
 class FJsonValue;
+class UARPGInventoryComponent;
+class AARPGLootChest;
+class SVerticalBox;
 
 /** One injected input over a time window. Key => real simulated key through the
  *  PlayerController (exercises IMC bindings). Else ActionPath+Value => action-level. */
@@ -135,6 +138,22 @@ private:
     // AttackRange at scenario start, so a melee duel engages deterministically instead of
     // depending on chase pathing (mirrors VSEnemyAttackTest's deterministic placement).
     bool bMeleeEngage = false;
+
+    // --- Inventory stream (Stream 4): set start-health, loot a chest, observe contents,
+    //     show an inventory overlay, and use a potion. All additive — absent JSON keys leave
+    //     every existing scenario's behavior unchanged. ---
+    float StartHealth = -1.f;        // -1 = leave unchanged; else set the player's Health base at Begin
+    bool  bShowInventoryUI = false;  // build a Slate inventory overlay + include it in viewport captures
+    bool  bInvUIAdded = false;
+    TSharedPtr<SVerticalBox> InvUIList;  // the item-row container, repopulated before each UI capture
+
+    void SetStartHealth();
+    void HandleLootChest();
+    void HandleCollectLoot();
+    void HandleUseItem();
+    void EnsureInventoryUI();
+    void RefreshInventoryUI();
+    UARPGInventoryComponent* GetPlayerInventory() const;
 
     bool LoadScenario(const FString& Path);
     void Begin();

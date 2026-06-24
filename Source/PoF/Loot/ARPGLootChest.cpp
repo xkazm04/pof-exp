@@ -129,7 +129,8 @@ void AARPGLootChest::SpawnLoot()
 
 		if (WorldItem)
 		{
-			WorldItem->InitFromItemInstance(AllItems[i]);
+			// Chest loot routes into the looter's inventory (not the slice VFX-and-destroy).
+			WorldItem->InitFromItemInstance(AllItems[i], /*bRouteToInventory=*/true);
 		}
 	}
 
