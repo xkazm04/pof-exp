@@ -232,6 +232,11 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Combat|Weapon")
 	FTransform WeaponGripOffset;
 
+	/** Inventory the character carries. Phase 0 seam: every character (incl. BP_JediPlayer) has
+	 *  one, so the inventory stream wires loot/UI without editing this base class. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
+	TObjectPtr<class UARPGInventoryComponent> InventoryComponent;
+
 	// =====================================================================
 	// Motion Warping
 	// =====================================================================

@@ -18,6 +18,7 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "AbilitySystem/ARPGAttributeSet.h"
+#include "Inventory/ARPGInventoryComponent.h"
 #include "AbilitySystem/ARPGAttributeInitData.h"
 #include "AbilitySystem/ARPGGameplayTags.h"
 #include "AbilitySystem/Effects/GE_InitAttributes.h"
@@ -116,6 +117,9 @@ AARPGCharacterBase::AARPGCharacterBase()
 	WeaponMesh->SetupAttachment(GetMesh(), WeaponAttachBone);
 	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	WeaponMesh->SetGenerateOverlapEvents(false);
+
+	// --- Inventory (Phase 0 seam: the inventory stream extends this without touching the base) ---
+	InventoryComponent = CreateDefaultSubobject<UARPGInventoryComponent>(TEXT("InventoryComponent"));
 }
 
 UAbilitySystemComponent* AARPGCharacterBase::GetAbilitySystemComponent() const
