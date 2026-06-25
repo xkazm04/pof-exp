@@ -1,8 +1,6 @@
-"""Colosseum — Pass 4: build the COLOSSEUM FORM procedurally (engine basic shapes + travertine).
-
-Encircles the existing square arena with an elliptical, rising-and-receding tiered seating
-cavea, topped by a Roman arcade (piers + entablature + a colonnade of columns). All
-engine-native primitives, all travertine. Idempotent: clears prior Colo_* actors first.
+"""Colosseum geometry — tiered seating cavea + Roman arcade, sized for the 4x (real-scale)
+colosseum (~185 m diameter). Engine basic shapes + travertine. Idempotent (clears Colo_Geo_*).
+Params A0/B0/N_TIERS/dA/dB/dZ/NP MUST match colo_pass5_arches.py.
 """
 import math
 import unreal
@@ -12,12 +10,13 @@ CUBE = "/Engine/BasicShapes/Cube"
 CYL = "/Engine/BasicShapes/Cylinder"
 TRAV = "/Game/Environments/AncientArena/M_Travertine"
 
-# --- form params ---
-A0, B0 = 1500.0, 1350.0      # inner seating semi-axes (outside the ~1025 square arena corners)
-N_TIERS = 6
-dA, dB, dZ = 130.0, 120.0, 100.0
-SEAT_W = 480.0               # target seating-block width along the arc
-res = {"seats": 0, "arcade": 0, "errors": []}
+# --- real-scale form (shared with colo_pass5_arches) ---
+A0, B0 = 6000.0, 5600.0       # inner seating semi-axes (outside the ~5800 square-arena corners)
+N_TIERS = 8
+dA, dB, dZ = 360.0, 330.0, 320.0
+SEAT_W = 1150.0
+NP = 40                       # arcade bays / arches
+res = {"seats": 0, "arcade": 0}
 
 
 def comp(a, c):
@@ -27,19 +26,16 @@ def comp(a, c):
 def main():
     unreal.EditorLoadingAndSavingUtils.load_map(MAP)
     eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
-    cube = unreal.load_asset(CUBE)
-    cyl = unreal.load_asset(CYL)
-    trav = unreal.load_asset(TRAV)
+    cube, cyl, trav = unreal.load_asset(CUBE), unreal.load_asset(CYL), unreal.load_asset(TRAV)
 
-    # idempotent: clear prior colosseum geometry
     cleared = 0
     for a in list(eas.get_all_level_actors()):
         if a.get_actor_label().startswith("Colo_Geo_"):
             eas.destroy_actor(a); cleared += 1
 
-    def place(mesh, x, y, z, yaw, sx, sy, sz, label, pitch=0.0, roll=0.0):
+    def place(mesh, x, y, z, yaw, sx, sy, sz, label):
         act = eas.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(x, y, z),
-                                         unreal.Rotator(roll=roll, pitch=pitch, yaw=yaw))
+                                         unreal.Rotator(roll=0.0, pitch=0.0, yaw=yaw))
         smc = comp(act, unreal.StaticMeshComponent)
         if smc and mesh:
             smc.set_static_mesh(mesh)
@@ -47,53 +43,36 @@ def main():
             if trav:
                 smc.set_material(0, trav)
         act.set_actor_label(label)
-        return act
 
-    # ---------- tiered seating cavea (elliptical, rising + receding) ----------
-    idx = 0
+    # tiered seating cavea (rising + receding stepped rings)
     for i in range(N_TIERS):
-        Ai = A0 + i * dA
-        Bi = B0 + i * dB
-        z = i * dZ
+        Ai, Bi, z = A0 + i * dA, B0 + i * dB, i * dZ
         ravg = (Ai + Bi) * 0.5
-        segs = max(20, int(2.0 * math.pi * ravg / SEAT_W))
+        segs = max(24, int(2.0 * math.pi * ravg / SEAT_W))
         seg_arc = 2.0 * math.pi * ravg / segs
         for k in range(segs):
             th = 2.0 * math.pi * k / segs
-            x, y = Ai * math.cos(th), Bi * math.sin(th)
-            yaw = math.degrees(th) + 90.0           # long axis tangent to the ring
-            sx = (seg_arc * 1.12) / 100.0           # fill the arc (+overlap)
-            sy = (dA * 1.35) / 100.0                # radial depth (tiers overlap)
-            sz = 0.95                               # riser height ~95cm
-            place(cube, x, y, z + 47.0, yaw, sx, sy, sz, "Colo_Geo_Seat_%d_%d" % (i, k))
-            idx += 1
-    res["seats"] = idx
+            place(cube, Ai * math.cos(th), Bi * math.sin(th), z + dZ * 0.5,
+                  math.degrees(th) + 90.0, (seg_arc * 1.1) / 100.0, (dA * 1.3) / 100.0, dZ / 100.0,
+                  "Colo_Geo_Seat_%d_%d" % (i, k))
+            res["seats"] += 1
 
-    # ---------- top arcade: piers + entablature + colonnade ----------
-    Aa = A0 + N_TIERS * dA
-    Ba = B0 + N_TIERS * dB
-    top_z = N_TIERS * dZ
-    NP = 26
+    # top arcade: piers + engaged columns + entablature
+    Aa, Ba, top_z = A0 + N_TIERS * dA, B0 + N_TIERS * dB, N_TIERS * dZ
     for k in range(NP):
         th = 2.0 * math.pi * k / NP
-        x, y = Aa * math.cos(th), Ba * math.sin(th)
-        yaw = math.degrees(th) + 90.0
-        # pier (tall box)
-        place(cube, x, y, top_z + 260.0, yaw, 1.1, 1.6, 5.2, "Colo_Geo_Pier_%d" % k)
-        # engaged column just inside the pier
-        cx, cy = (Aa - 70.0) * math.cos(th), (Ba - 70.0) * math.sin(th)
-        place(cyl, cx, cy, top_z + 230.0, 0.0, 0.85, 0.85, 4.6, "Colo_Geo_Col_%d" % k)
+        x, y, yaw = Aa * math.cos(th), Ba * math.sin(th), math.degrees(th) + 90.0
+        place(cube, x, y, top_z + 380.0, yaw, 2.6, 3.6, 7.6, "Colo_Geo_Pier_%d" % k)
+        place(cyl, (Aa - 180.0) * math.cos(th), (Ba - 180.0) * math.sin(th), top_z + 330.0,
+              0.0, 2.2, 2.2, 6.6, "Colo_Geo_Col_%d" % k)
         res["arcade"] += 2
-    # entablature ring on top of the piers
     ravg = (Aa + Ba) * 0.5
-    esegs = max(24, int(2.0 * math.pi * ravg / 360.0))
+    esegs = max(28, int(2.0 * math.pi * ravg / 760.0))
     eseg = 2.0 * math.pi * ravg / esegs
     for k in range(esegs):
         th = 2.0 * math.pi * k / esegs
-        x, y = Aa * math.cos(th), Ba * math.sin(th)
-        yaw = math.degrees(th) + 90.0
-        place(cube, x, y, top_z + 540.0, yaw, (eseg * 1.12) / 100.0, 2.0, 1.1,
-              "Colo_Geo_Entab_%d" % k)
+        place(cube, Aa * math.cos(th), Ba * math.sin(th), top_z + 800.0, math.degrees(th) + 90.0,
+              (eseg * 1.1) / 100.0, 4.2, 1.6, "Colo_Geo_Entab_%d" % k)
         res["arcade"] += 1
 
     saved = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()

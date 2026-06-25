@@ -14,9 +14,10 @@ EXP_BIAS = 0.3
 EXP_MIN = 0.1
 EXP_MAX = 4.0
 # absolute camera (the colosseum stands reach radius ~2280, top ~z1100)
-CAM_X, CAM_Y, CAM_Z = 3050.0, -3050.0, 1480.0   # establishing hero — whole colosseum
-LOOK_X, LOOK_Y, LOOK_Z = 0.0, 0.0, 220.0
-FOV = 70.0
+CAM_X, CAM_Y, CAM_Z = 12000.0, -12000.0, 6000.0  # 4x-scale establishing hero
+LOOK_X, LOOK_Y, LOOK_Z = 0.0, 0.0, 900.0
+FOV = 66.0
+HERO_ACTIVE = False  # True = hero cam captures; False = playable (normal gameplay camera)
 # ----------------
 
 
@@ -70,6 +71,8 @@ def main():
         cam.set_actor_location_and_rotation(cam_loc, rot, False, False)
         cc = comp(cam, unreal.CameraComponent)
         if cc: S(cc, "field_of_view", FOV)
+        S(cam, "auto_activate_for_player",
+          unreal.AutoReceiveInput.PLAYER0 if HERO_ACTIVE else unreal.AutoReceiveInput.DISABLED)
 
     saved = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
     unreal.log("[TUNE] sun=%.1f@%.0f sky=%.1f bias=%.1f cam=(%.0f,%.0f,%.0f) saved=%s"
