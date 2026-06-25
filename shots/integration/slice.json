@@ -1,0 +1,15 @@
+{
+  "out_dir": "C:/Users/kazda/Documents/Unreal Projects/PoF-integration/Saved/Observations/integration",
+  "total_seconds": 5.0,
+  "num_samples": 10,
+  "settle": 0.8,
+  "disable_ai": true,
+  "start_health": 50,
+  "show_inventory_ui": true,
+  "inputs": [
+    { "event": "loot_chest", "start": 0.3, "duration": 0.1 },
+    { "event": "collect_loot", "start": 1.2, "duration": 0.1 },
+    { "event": "activate_ability", "event_arg": "Ability.ForcePush", "start": 2.0, "duration": 0.1 },
+    { "event": "use_item", "start": 3.4, "duration": 0.1 }
+  ]
+}
