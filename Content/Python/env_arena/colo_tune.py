@@ -5,17 +5,18 @@ import unreal
 MAP = "/Game/Maps/Arena_Ancient"
 
 # --- tune me ---
-SUN_INTENSITY = 11.0
-SUN_PITCH = -32.0
-SUN_YAW = 40.0
-SKY_INTENSITY = 2.6
-EXP_BIAS = 0.2
+SUN_INTENSITY = 9.0
+SUN_PITCH = -17.0          # low golden-hour sun -> long shadows + god-rays through the arches
+SUN_YAW = 42.0
+SUN_COLOR = (1.0, 0.72, 0.43)
+SKY_INTENSITY = 2.2
+EXP_BIAS = 0.3
 EXP_MIN = 0.1
 EXP_MAX = 4.0
 # absolute camera (the colosseum stands reach radius ~2280, top ~z1100)
-CAM_X, CAM_Y, CAM_Z = 2700.0, -2700.0, 1300.0   # elevated 3/4 — whole bowl + arcade ring
-LOOK_X, LOOK_Y, LOOK_Z = 0.0, 0.0, 250.0
-FOV = 72.0
+CAM_X, CAM_Y, CAM_Z = 3050.0, -3050.0, 1480.0   # establishing hero — whole colosseum
+LOOK_X, LOOK_Y, LOOK_Z = 0.0, 0.0, 220.0
+FOV = 70.0
 # ----------------
 
 
@@ -51,6 +52,7 @@ def main():
     if dl:
         dlc = comp(dl, unreal.DirectionalLightComponent)
         dlc.set_intensity(SUN_INTENSITY)
+        dlc.set_light_color(unreal.LinearColor(SUN_COLOR[0], SUN_COLOR[1], SUN_COLOR[2], 1.0))
         dl.set_actor_rotation(unreal.Rotator(roll=0.0, pitch=SUN_PITCH, yaw=SUN_YAW), False)
     if sl:
         comp(sl, unreal.SkyLightComponent).set_intensity(SKY_INTENSITY)
