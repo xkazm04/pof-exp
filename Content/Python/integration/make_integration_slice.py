@@ -16,7 +16,7 @@ import math
 import unreal
 
 EAL = unreal.EditorAssetLibrary
-SRC = "/Game/Maps/VerticalSlice"
+SRC = "/Game/Maps/Arena_Ancient"   # Environment stream's sandy arena (was VerticalSlice stand-in)
 DST = "/Game/Maps/Integration_Slice"
 GM = "/Game/Characters/Jedi/BP_JediGameMode"
 LOOT_TABLE = "/Game/Inventory/LT_ChestPotion"
