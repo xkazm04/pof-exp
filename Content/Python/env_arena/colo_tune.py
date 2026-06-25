@@ -14,9 +14,9 @@ EXP_BIAS = 0.3
 EXP_MIN = 0.1
 EXP_MAX = 4.0
 # absolute camera (the colosseum stands reach radius ~2280, top ~z1100)
-CAM_X, CAM_Y, CAM_Z = 12000.0, -12000.0, 6000.0  # 4x-scale establishing hero
-LOOK_X, LOOK_Y, LOOK_Z = 0.0, 0.0, 900.0
-FOV = 66.0
+CAM_X, CAM_Y, CAM_Z = 13500.0, -10500.0, 5600.0  # establishing — colosseum in its desert context
+LOOK_X, LOOK_Y, LOOK_Z = 0.0, 1200.0, 500.0
+FOV = 64.0
 HERO_ACTIVE = False  # True = hero cam captures; False = playable (normal gameplay camera)
 # ----------------
 
