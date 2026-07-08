@@ -103,9 +103,28 @@ def build_rows(abilities):
     return rows
 
 
+# Built-in status-effect abilities that are always seeded regardless of the manifest
+# (catalog pipeline: status-effect -> UE Packaging). "Burning" is the fire DoT applied by
+# GE_Gen_Burning (grants State.Burning, periodic execution); it has a live L3 gate
+# (VSStatusBurningEffectTest). Kept here so the row exists even before the generator runs.
+BUILTIN_ABILITIES = [
+    {
+        "name": "Burning",
+        "abilityClass": "",
+        "effectClasses": ["/Game/Abilities/Generated/GE_Gen_Burning"],
+    },
+]
+
+
+def merge_builtins(abilities):
+    """Append built-in abilities that the manifest did not already define (by name)."""
+    have = {a.get("name", "") for a in abilities}
+    return list(abilities) + [b for b in BUILTIN_ABILITIES if b["name"] not in have]
+
+
 def main():
     unreal.log("[seed_generated_abilities] Starting.")
-    abilities = load_manifest()
+    abilities = merge_builtins(load_manifest())
     ensure_folder(PACKAGE_FOLDER)
     row_struct = load_row_struct()
     dt = get_or_create_datatable(row_struct)
