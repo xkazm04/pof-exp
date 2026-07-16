@@ -154,16 +154,18 @@ void UGA_MeleeAttack::StartMontageAndListenForCombo()
 	// fails to play — otherwise EndAbility tears them down before a hit lands.
 	ListenForComboWindow();
 
-	// Self-heal a broken/empty attack montage: the project ships an empty AM_MeleeCombo
-	// placeholder (0s, no animation), so the basic attack played nothing. Fall back to the
-	// real sword slash (AM_SwordSlash) so the attack actually SWINGS, and guarantee a section.
-	// Use the code-authored quick slash (AM_SwordSlashC); fall back to the original. Always
-	// overrides the assigned montage so the basic attack shows it in PIE.
-	UAnimMontage* Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlashC.AM_SwordSlashC"));
-	if (!Slash) { Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlash.AM_SwordSlash")); }
-	if (Slash)
+	// Self-heal a broken/empty attack montage ONLY: if the Blueprint assigns a real
+	// montage (e.g. the ARDY-generated slash), it plays as configured. The previous
+	// unconditional override ("always show SOMETHING in PIE") silently discarded every
+	// configured montage and locked the attack to the code-authored AM_SwordSlashC.
+	if (!AttackMontage || AttackMontage->GetPlayLength() <= 0.f)
 	{
-		AttackMontage = Slash;
+		UAnimMontage* Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlashC.AM_SwordSlashC"));
+		if (!Slash) { Slash = LoadObject<UAnimMontage>(nullptr, TEXT("/Game/Weapons/AM_SwordSlash.AM_SwordSlash")); }
+		if (Slash)
+		{
+			AttackMontage = Slash;
+		}
 	}
 	if (ComboSectionNames.Num() == 0)
 	{

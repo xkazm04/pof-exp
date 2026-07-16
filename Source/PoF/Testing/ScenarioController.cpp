@@ -451,6 +451,16 @@ void UScenarioController::Begin()
     {
         EngageNearestEnemy();
     }
+    // Headless captures: the possessed player's mesh is never "rendered" under
+    // -RenderOffScreen, so its pose freezes between capture instants and every
+    // sampled frame shows a stale pose (montages advance logically but not visually).
+    // Force always-tick on the PLAYER mesh for every scenario, not just play_anim.
+    if (USkeletalMeshComponent* PlayerMesh = GetMesh())
+    {
+        PlayerMesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+        PlayerMesh->bEnableUpdateRateOptimizations = false;
+        UE_LOG(LogPoFScenario, Display, TEXT("[scenario] player mesh forced to AlwaysTickPoseAndRefreshBones"));
+    }
     if (!PlayAnim.IsEmpty())
     {
         if (USkeletalMeshComponent* Mesh = GetMesh())
@@ -572,6 +582,16 @@ void UScenarioController::DoSample(int32 Idx)
     // Scrub a force-played single-node anim to scenario time so each sample captures a KNOWN
     // frame. Off-screen these anims don't auto-advance, so we set the position explicitly and
     // force a bone refresh before the scene capture below.
+    // Headless captures: the possessed player's mesh is never "rendered" under
+    // -RenderOffScreen, so its pose freezes between capture instants and every
+    // sampled frame shows a stale pose (montages advance logically but not visually).
+    // Force always-tick on the PLAYER mesh for every scenario, not just play_anim.
+    if (USkeletalMeshComponent* PlayerMesh = GetMesh())
+    {
+        PlayerMesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+        PlayerMesh->bEnableUpdateRateOptimizations = false;
+        UE_LOG(LogPoFScenario, Display, TEXT("[scenario] player mesh forced to AlwaysTickPoseAndRefreshBones"));
+    }
     if (!PlayAnim.IsEmpty())
     {
         if (USkeletalMeshComponent* Mesh = GetMesh())
