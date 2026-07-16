@@ -3,7 +3,7 @@ world positions over time via the AnimPose API. The roll must show pelvis dip->r
 import unreal
 
 SRC = "/Game/Generated/Ardy/Manny"
-CLIPS = ["slash_Anim_Manny", "run_Anim_Manny", "roll_Anim_Manny", "idle_Anim_Manny"]
+CLIPS = ["combo1_Anim_Manny", "combo2_Anim_Manny", "combo3_Anim_Manny"]
 BONES = ["pelvis", "foot_l", "foot_r", "head"]
 
 for name in CLIPS:
