@@ -71,7 +71,10 @@ bool FVSCharacterVaelTest::RunTest(const FString& /*Parameters*/)
 	Stats.Armor = 30.f;
 	Stats.AttackPower = 24.f;
 	Stats.CriticalChance = 0.08f;
-	Stats.CriticalDamage = 1.6f;
+	// Canon arpg-damage-model crit base multiplier is x2.5 (+150%). Vael's seed
+	// (seed-characters.ts criticalDamage: 2.5) single-sources this value; the
+	// legacy x1.6 was a pre-canon drift corrected app-side first (Decision 6).
+	Stats.CriticalDamage = 2.5f;
 	Stats.CharacterLevel = 5.f;
 
 	TestEqual(TEXT("Canonical MaxHealth = 220"), Stats.MaxHealth, 220.f);
@@ -82,6 +85,10 @@ bool FVSCharacterVaelTest::RunTest(const FString& /*Parameters*/)
 	TestTrue(TEXT("Crit chance within [0,1]"),
 		Stats.CriticalChance >= 0.f && Stats.CriticalChance <= 1.f);
 	TestTrue(TEXT("Crit damage is a multiplier >= 1"), Stats.CriticalDamage >= 1.f);
+	// Pin the canon x2.5 crit multiplier so the gate catches any regression to
+	// the legacy x1.6 form (single-sourced to seed-characters.ts criticalDamage).
+	TestEqual(TEXT("Canonical CriticalDamage = x2.5 (canon crit base)"),
+		Stats.CriticalDamage, 2.5f);
 
 	return !HasAnyErrors();
 }
