@@ -2,6 +2,7 @@
 #include "ARPGDialogueComponent.h"
 #include "ARPGDialogueTree.h"
 #include "ARPGDialogueTypes.h"
+#include "ARPGDuelIntroDialogue.h"
 #include "Player/ARPGPlayerCharacter.h"
 #include "Quest/ARPGQuestSubsystem.h"
 #include "Quest/ARPGQuestTypes.h"
@@ -50,6 +51,16 @@ void AARPGNPCActor::BeginPlay()
 
 	if (DialogueComp)
 	{
+		// Darth Malgrave self-carries the Duel Challenge tree (dialog-trees catalog:
+		// dialog-duel-intro) from the code-as-data builder — placing/spawning an NPC
+		// with NPCID "Malgrave" needs no .uasset authoring to speak the pre-duel beat.
+		if (DialogueComp->DialogueTrees.Num() == 0 && NPCID == FName(TEXT("Malgrave")))
+		{
+			UARPGDialogueTree* DuelIntro = NewObject<UARPGDialogueTree>(this, TEXT("DuelIntroTree"));
+			ARPGDuelIntroDialogue::Populate(*DuelIntro);
+			DialogueComp->DialogueTrees.Add(DuelIntro);
+		}
+
 		// Report TalkTo quest event when dialogue starts on this NPC
 		if (!NPCID.IsNone())
 		{
