@@ -283,6 +283,39 @@ FEnemyArchetypeDefaults AARPGEnemyCharacter::GetArchetypeDefaults(EEnemyArchetyp
 		D.LootRarityBonusMultiplier = 2.f;
 		D.BaseXPReward = 25.f;
 		break;
+
+	// Arena-duel Sith — mirrors the bestiary catalog Stat Blocks (duel scale):
+	// moveSpeed 600/570/630 cm/s; loot rarity bonus = the SOR XP rarity class
+	// (rare x5 / magic x2 per progression-curves XP Sources).
+	case EEnemyArchetype::SithLord:
+		D.AttackRange = 250.f;
+		D.AttackCooldown = 2.0f;
+		D.PrimaryAbilityTag = ARPGGameplayTags::Ability_Melee_LightAttack;
+		D.MoveSpeed = 600.f;
+		D.LootNumRolls = 1;
+		D.LootRarityBonusMultiplier = 5.f;
+		D.BaseXPReward = 50.f;
+		break;
+
+	case EEnemyArchetype::SithAcolyte:
+		D.AttackRange = 220.f;
+		D.AttackCooldown = 2.2f;
+		D.PrimaryAbilityTag = ARPGGameplayTags::Ability_Melee_LightAttack;
+		D.MoveSpeed = 570.f;
+		D.LootNumRolls = 1;
+		D.LootRarityBonusMultiplier = 2.f;
+		D.BaseXPReward = 20.f;
+		break;
+
+	case EEnemyArchetype::DarkMarauder:
+		D.AttackRange = 230.f;
+		D.AttackCooldown = 1.8f;
+		D.PrimaryAbilityTag = ARPGGameplayTags::Ability_Melee_LightAttack;
+		D.MoveSpeed = 630.f;
+		D.LootNumRolls = 1;
+		D.LootRarityBonusMultiplier = 2.f;
+		D.BaseXPReward = 20.f;
+		break;
 	}
 	return D;
 }
@@ -298,6 +331,15 @@ void AARPGEnemyCharacter::ApplyArchetypeDefaults()
 	PrimaryAbilityTag = D.PrimaryAbilityTag;
 	ChargeVulnerabilityDuration = D.ChargeVulnerabilityDuration;
 	ChargeSpeedMultiplier = D.ChargeSpeedMultiplier;
+	// Bestiary Stat Block moveSpeed (wired, not decorative): 0 keeps the class default.
+	if (D.MoveSpeed > 0.f)
+	{
+		WalkSpeed = D.MoveSpeed;
+		if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+		{
+			MoveComp->MaxWalkSpeed = D.MoveSpeed;
+		}
+	}
 	if (LootDropComponent)
 	{
 		LootDropComponent->NumRolls = D.LootNumRolls;

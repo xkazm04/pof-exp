@@ -19,7 +19,11 @@ enum class EEnemyArchetype : uint8
 {
 	MeleeGrunt    UMETA(DisplayName = "Melee Grunt"),
 	RangedCaster  UMETA(DisplayName = "Ranged Caster"),
-	Brute         UMETA(DisplayName = "Brute")
+	Brute         UMETA(DisplayName = "Brute"),
+	// Arena-duel Sith (bestiary catalog: bestiary-sith-lord / -sith-acolyte / -dark-marauder)
+	SithLord      UMETA(DisplayName = "Sith Lord"),
+	SithAcolyte   UMETA(DisplayName = "Sith Acolyte"),
+	DarkMarauder  UMETA(DisplayName = "Dark Marauder")
 };
 
 /**
@@ -42,6 +46,8 @@ struct FEnemyArchetypeDefaults
 	int32 LootNumRolls = 1;
 	float LootRarityBonusMultiplier = 1.f;
 	float BaseXPReward = 10.f;
+	/** MaxWalkSpeed override (cm/s, bestiary Stat Block). 0 = keep the class default. */
+	float MoveSpeed = 0.f;
 };
 
 UCLASS()
