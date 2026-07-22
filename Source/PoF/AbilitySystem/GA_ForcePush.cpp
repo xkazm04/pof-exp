@@ -113,6 +113,13 @@ void UGA_ForcePush::ApplyForcePush()
 		{
 			const FVector LaunchVel = ToTarget * HorizontalKnockback + FVector(0.f, 0.f, VerticalKnockback);
 			TargetChar->LaunchCharacter(LaunchVel, true, true);
+
+			// Landing follow-up (status-effects::status-dazed): flag the target so
+			// AARPGCharacterBase::Landed applies UGE_Dazed at ground re-contact.
+			if (AARPGCharacterBase* ARPGChar = Cast<AARPGCharacterBase>(TargetChar))
+			{
+				ARPGChar->bPendingDazeOnLanding = true;
+			}
 		}
 
 		// 2. Light physical damage via the shared damage execution.

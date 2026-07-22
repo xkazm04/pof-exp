@@ -1,5 +1,7 @@
 #include "ARPGCharacterBase.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/ARPGGameplayTags.h"
+#include "AbilitySystem/Effects/GE_Dazed.h"
 #include "Abilities/GameplayAbility.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -227,6 +229,26 @@ void AARPGCharacterBase::BeginPlay()
 		if (!WeaponGripOffset.Equals(FTransform::Identity))
 		{
 			WeaponMesh->SetRelativeTransform(WeaponGripOffset);
+		}
+	}
+}
+
+void AARPGCharacterBase::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+
+	// Force Push landing follow-up (status-effects::status-dazed): the daze starts
+	// at ground re-contact — post-impact disorientation, not mid-flight CC.
+	if (bPendingDazeOnLanding)
+	{
+		bPendingDazeOnLanding = false;
+		UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+		if (ASC && !ASC->HasMatchingGameplayTag(ARPGGameplayTags::State_Immune_Daze))
+		{
+			const UGE_Dazed* DazeCDO = GetDefault<UGE_Dazed>();
+			FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+			Context.AddInstigator(this, this);
+			ASC->ApplyGameplayEffectToSelf(DazeCDO, 1.f, Context);
 		}
 	}
 }
@@ -653,7 +675,16 @@ void AARPGCharacterBase::UpdateSprintEffects(float DeltaTime)
 	// Don't modify walk speed during dodge
 	if (bIsDodging) return;
 
-	const float TargetSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+	// Statuses scale the target speed — a dazed character shambles (status-dazed: 0.25x).
+	float StatusMul = 1.f;
+	if (const UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		if (ASC->HasMatchingGameplayTag(ARPGGameplayTags::State_Dazed))
+		{
+			StatusMul = DazedSpeedMultiplier;
+		}
+	}
+	const float TargetSpeed = (bIsSprinting ? SprintSpeed : WalkSpeed) * StatusMul;
 	// InterpSpeed = 1/InterpTime gives us ~63% per InterpTime, effectively smooth over 0.2s
 	const float InterpSpeed = (SprintSpeedInterpTime > 0.f) ? (1.f / SprintSpeedInterpTime) : 100.f;
 

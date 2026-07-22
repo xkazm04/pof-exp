@@ -24,6 +24,8 @@ namespace ARPGGameplayTags
 	// --- State ---
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Dead,         "State.Dead",         "Character is dead");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Stunned,      "State.Stunned",      "Character is stunned and cannot act");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Dazed,        "State.Dazed",        "Post-impact disorientation: heavy move slow + attack/cast block (Force Push landing follow-up)");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Immune_Daze,  "State.Immune.Daze",  "Immune to the Dazed status");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Invulnerable, "State.Invulnerable", "Character is invulnerable to damage");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Attacking,    "State.Attacking",    "Character is performing an attack");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Charging,     "State.Charging",     "Enemy is mid-charge attack");

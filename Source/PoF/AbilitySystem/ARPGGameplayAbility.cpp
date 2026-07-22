@@ -13,6 +13,7 @@ UARPGGameplayAbility::UARPGGameplayAbility()
 	// Block activation while dead or stunned
 	ActivationBlockedTags.AddTag(ARPGGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(ARPGGameplayTags::State_Stunned);
+	ActivationBlockedTags.AddTag(ARPGGameplayTags::State_Dazed);
 }
 
 AARPGCharacterBase* UARPGGameplayAbility::GetARPGCharacter() const

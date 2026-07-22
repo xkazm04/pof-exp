@@ -67,6 +67,7 @@ public:
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
+	virtual void Landed(const FHitResult& Hit) override;
 
 	/** Zoom the spring arm in/out. Sets a target that smoothly interpolates. */
 	void ZoomCamera(float DeltaLength);
@@ -554,6 +555,17 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Sprint")
 	float SprintSpeedInterpTime = 0.2f;
+
+public:
+	// --- Daze (status-effects::status-dazed: Force Push landing follow-up) ---
+	/** MaxWalkSpeed multiplier while State.Dazed is active (catalog: 0.25). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Daze", meta = (ClampMin = "0", ClampMax = "1"))
+	float DazedSpeedMultiplier = 0.25f;
+
+	/** Set by UGA_ForcePush on launch; consumed by Landed() to apply UGE_Dazed on ground re-contact. */
+	bool bPendingDazeOnLanding = false;
+
+protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Sprint")
 	float SprintArmLengthOffset = 100.f;
