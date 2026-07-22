@@ -1,5 +1,7 @@
 #include "World/PoFFeatureLabSubsystem.h"
 #include "Dialogue/ARPGNPCActor.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
 
@@ -51,11 +53,22 @@ void UPoFFeatureLabSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 			UE_LOG(LogTemp, Warning, TEXT("[FeatureLab] class not found: %s"), *Entry.ClassPath);
 			continue;
 		}
-		const FVector Pos = Anchor + Entry.Offset;
+		FVector Pos = Anchor + Entry.Offset;
+		// Ground the spawn: static actors don't fall, and a PlayerStart sits well
+		// above the floor — trace down and rest the stand-in on the surface.
+		FHitResult Floor;
+		const FVector TraceFrom = Pos + FVector(0.f, 0.f, 300.f);
+		if (InWorld.LineTraceSingleByChannel(Floor, TraceFrom, TraceFrom - FVector(0.f, 0.f, 2000.f), ECC_Visibility))
+		{
+			Pos.Z = Floor.ImpactPoint.Z + 92.f; // cylinder half-height at the lab scale
+		}
 		const FRotator Facing = (Anchor - Pos).Rotation();
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-		AActor* Spawned = InWorld.SpawnActor<AActor>(Cls, Pos, FRotator(0.f, Facing.Yaw, 0.f), Params);
+		// DEFERRED spawn: NPCID must be set BEFORE BeginPlay fires, or the NPC
+		// begins play as None and never self-attaches its dialogue tree.
+		const FTransform SpawnTM(FRotator(0.f, Facing.Yaw, 0.f), Pos);
+		AActor* Spawned = InWorld.SpawnActorDeferred<AActor>(
+			Cls, SpawnTM, nullptr, nullptr,
+			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
 		if (!Spawned)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[FeatureLab] spawn failed: %s"), *Entry.Label);
@@ -71,6 +84,31 @@ void UPoFFeatureLabSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 				NPC->NPCID = Entry.NPCID;
 				NPC->DisplayName = FText::FromString(TEXT("Darth Malgrave"));
 			}
+		}
+		Spawned->FinishSpawning(SpawnTM);
+		// Code-spawned NPCs have NO mesh assigned (designers set it per map
+		// instance) — an invisible actor reads as "the feature is missing".
+		// Give meshless spawns a visible engine-capsule stand-in.
+		UStaticMeshComponent* MeshComp = Spawned->FindComponentByClass<UStaticMeshComponent>();
+		if (!MeshComp)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[FeatureLab] %s: no StaticMeshComponent found"), *Entry.Label);
+		}
+		else if (MeshComp->GetStaticMesh())
+		{
+			UE_LOG(LogTemp, Log, TEXT("[FeatureLab] %s already has mesh %s"),
+				*Entry.Label, *MeshComp->GetStaticMesh()->GetName());
+		}
+		else if (UStaticMesh* Capsule = LoadObject<UStaticMesh>(
+				nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")))
+		{
+			MeshComp->SetStaticMesh(Capsule);
+			MeshComp->SetRelativeScale3D(FVector(0.8f, 0.8f, 1.8f));
+			UE_LOG(LogTemp, Log, TEXT("[FeatureLab] %s had no mesh - cylinder stand-in applied"), *Entry.Label);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[FeatureLab] %s: engine cylinder failed to load"), *Entry.Label);
 		}
 		UE_LOG(LogTemp, Log, TEXT("[FeatureLab] spawned %s at %s"), *Entry.Label, *Pos.ToCompactString());
 	}

@@ -59,6 +59,8 @@ void AARPGNPCActor::BeginPlay()
 			UARPGDialogueTree* DuelIntro = NewObject<UARPGDialogueTree>(this, TEXT("DuelIntroTree"));
 			ARPGDuelIntroDialogue::Populate(*DuelIntro);
 			DialogueComp->DialogueTrees.Add(DuelIntro);
+			UE_LOG(LogTemp, Log, TEXT("[DuelIntro] %s self-attached the Duel Challenge tree (%d nodes)"),
+				*GetName(), DuelIntro->Nodes.Num());
 		}
 
 		// Report TalkTo quest event when dialogue starts on this NPC
