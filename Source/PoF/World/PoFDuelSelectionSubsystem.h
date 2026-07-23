@@ -19,6 +19,17 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Duel")
 	FName SelectedSaber;
 
+	/** Quest palette id ('lords-challenge' / 'echoes-order') or NAME_None. */
+	UPROPERTY(BlueprintReadOnly, Category = "Duel")
+	FName SelectedQuest;
+
+	UFUNCTION(BlueprintCallable, Category = "Duel")
+	void SelectQuest(FName Quest)
+	{
+		SelectedQuest = Quest;
+		UE_LOG(LogTemp, Log, TEXT("[PreGameMenu] quest selected: %s"), *Quest.ToString());
+	}
+
 	UFUNCTION(BlueprintCallable, Category = "Duel")
 	void SelectSaber(FName Saber)
 	{

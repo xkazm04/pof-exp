@@ -7,6 +7,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Blueprint/UserWidget.h"
 #include "UI/PreGameMenuWidget.h"
+#include "World/PoFDuelStaging.h"
 
 bool UPoFFeatureLabSubsystem::ShouldPopulate(const FString& MapName)
 {
@@ -41,12 +42,42 @@ void UPoFFeatureLabSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	}
 
 	// Pre-game menu (UE mirror of the browser staging shell): saber choice + Enter.
-	if (APlayerController* PC = InWorld.GetFirstPlayerController())
+	// Headless staging args stand in FOR the menu — don't cover the world with it.
+	FString ArgProbe;
+	const bool bHasStagingArgs =
+		FParse::Value(FCommandLine::Get(), TEXT("PoFSaber="), ArgProbe) ||
+		FParse::Value(FCommandLine::Get(), TEXT("PoFQuest="), ArgProbe);
+	if (APlayerController* PC = !bHasStagingArgs ? InWorld.GetFirstPlayerController() : nullptr)
 	{
 		if (UPreGameMenuWidget* Menu = CreateWidget<UPreGameMenuWidget>(PC, UPreGameMenuWidget::StaticClass()))
 		{
 			Menu->AddToViewport(30);
 			UE_LOG(LogTemp, Log, TEXT("[PreGameMenu] shown (built=%s)"), Menu->IsMenuBuilt() ? TEXT("yes") : TEXT("NO"));
+		}
+	}
+
+	// Headless proof path: -PoFSaber=Crimson / -PoFQuest=lords-challenge apply the
+	// SAME staging functions the menu's ENTER uses — frame captures verify visually.
+	{
+		FString SaberArg, QuestArg;
+		FParse::Value(FCommandLine::Get(), TEXT("PoFSaber="), SaberArg);
+		FParse::Value(FCommandLine::Get(), TEXT("PoFQuest="), QuestArg);
+		if (!QuestArg.IsEmpty())
+		{
+			PoFDuelStaging::ApplyQuestStaging(&InWorld, FName(*QuestArg));
+		}
+		if (!SaberArg.IsEmpty())
+		{
+			// Pawn possession can land after world begin-play — apply next tick.
+			const FName Saber(*SaberArg);
+			UWorld* WorldPtr = &InWorld;
+			InWorld.GetTimerManager().SetTimerForNextTick([WorldPtr, Saber]()
+			{
+				if (APlayerController* PC = WorldPtr->GetFirstPlayerController())
+				{
+					PoFDuelStaging::ApplySaberChoice(PC->GetPawn(), Saber);
+				}
+			});
 		}
 	}
 

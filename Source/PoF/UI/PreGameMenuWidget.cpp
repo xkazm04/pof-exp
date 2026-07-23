@@ -1,5 +1,7 @@
 #include "UI/PreGameMenuWidget.h"
 #include "World/PoFDuelSelectionSubsystem.h"
+#include "World/PoFDuelStaging.h"
+#include "GameFramework/Pawn.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
@@ -91,6 +93,30 @@ void UPreGameMenuWidget::BuildLayout()
 	SelSlot->SetHorizontalAlignment(HAlign_Center);
 	SelSlot->SetPadding(FMargin(0.f, 10.f));
 
+	auto* QuestHeadSlot = VBox->AddChildToVerticalBox(
+		MakeText(this, TEXT("Choose your quest"), 14, FLinearColor(0.6f, 0.72f, 0.9f)));
+	QuestHeadSlot->SetHorizontalAlignment(HAlign_Center);
+	QuestHeadSlot->SetPadding(FMargin(0.f, 6.f));
+
+	UHorizontalBox* QuestRow = NewObject<UHorizontalBox>(this);
+	auto* QuestRowSlot = VBox->AddChildToVerticalBox(QuestRow);
+	QuestRowSlot->SetHorizontalAlignment(HAlign_Center);
+
+	QuestLordsButton = NewObject<UButton>(this);
+	QuestLordsButton->AddChild(MakeText(this, TEXT("  LORD\'S CHALLENGE  "), 14, FLinearColor(1.f, 0.45f, 0.25f)));
+	QuestLordsButton->OnClicked.AddDynamic(this, &UPreGameMenuWidget::OnQuestLords);
+	QuestRow->AddChildToHorizontalBox(QuestLordsButton)->SetPadding(FMargin(6.f, 0.f));
+
+	QuestEchoesButton = NewObject<UButton>(this);
+	QuestEchoesButton->AddChild(MakeText(this, TEXT("  ECHOES OF THE ORDER  "), 14, FLinearColor(0.42f, 0.72f, 1.f)));
+	QuestEchoesButton->OnClicked.AddDynamic(this, &UPreGameMenuWidget::OnQuestEchoes);
+	QuestRow->AddChildToHorizontalBox(QuestEchoesButton)->SetPadding(FMargin(6.f, 0.f));
+
+	QuestText = MakeText(this, TEXT("No quest - a plain duel."), 12, FLinearColor(0.55f, 0.65f, 0.8f));
+	auto* QuestTextSlot = VBox->AddChildToVerticalBox(QuestText);
+	QuestTextSlot->SetHorizontalAlignment(HAlign_Center);
+	QuestTextSlot->SetPadding(FMargin(0.f, 8.f));
+
 	EnterButton = MakeButton(this, VBox, TEXT("  ENTER THE DUEL  "), FLinearColor(0.72f, 1.f, 0.87f));
 	EnterButton->OnClicked.AddDynamic(this, &UPreGameMenuWidget::OnEnter);
 
@@ -119,8 +145,44 @@ void UPreGameMenuWidget::Select(FName Saber)
 void UPreGameMenuWidget::OnCrimson() { Select(FName(TEXT("Crimson"))); }
 void UPreGameMenuWidget::OnAzure() { Select(FName(TEXT("Azure"))); }
 
+void UPreGameMenuWidget::SelectQuestId(FName Quest, const FString& Display)
+{
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UPoFDuelSelectionSubsystem* Sel = GI->GetSubsystem<UPoFDuelSelectionSubsystem>())
+		{
+			Sel->SelectQuest(Quest);
+		}
+	}
+	if (QuestText)
+	{
+		QuestText->SetText(FText::FromString(FString::Printf(TEXT("Quest: %s"), *Display)));
+	}
+}
+
+void UPreGameMenuWidget::OnQuestLords() { SelectQuestId(FName(TEXT("lords-challenge")), TEXT("The Lord\'s Challenge")); }
+void UPreGameMenuWidget::OnQuestEchoes() { SelectQuestId(FName(TEXT("echoes-order")), TEXT("Echoes of the Order")); }
+
 void UPreGameMenuWidget::OnEnter()
 {
 	SetVisibility(ESlateVisibility::Collapsed);
+	// Apply the selections to the world (same functions the headless args use).
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UPoFDuelSelectionSubsystem* Sel = GI->GetSubsystem<UPoFDuelSelectionSubsystem>())
+		{
+			if (!Sel->SelectedSaber.IsNone())
+			{
+				if (APlayerController* PC = GetOwningPlayer())
+				{
+					PoFDuelStaging::ApplySaberChoice(PC->GetPawn(), Sel->SelectedSaber);
+				}
+			}
+			if (!Sel->SelectedQuest.IsNone())
+			{
+				PoFDuelStaging::ApplyQuestStaging(GetWorld(), Sel->SelectedQuest);
+			}
+		}
+	}
 	UE_LOG(LogTemp, Log, TEXT("[PreGameMenu] entered the duel"));
 }

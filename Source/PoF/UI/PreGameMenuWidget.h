@@ -31,13 +31,19 @@ protected:
 
 	UFUNCTION() void OnCrimson();
 	UFUNCTION() void OnAzure();
+	UFUNCTION() void OnQuestLords();
+	UFUNCTION() void OnQuestEchoes();
 	UFUNCTION() void OnEnter();
 
 	void Select(FName Saber);
+	void SelectQuestId(FName Quest, const FString& Display);
 
 	UPROPERTY() TObjectPtr<UBorder> RootBorder;
 	UPROPERTY() TObjectPtr<UTextBlock> SelectionText;
 	UPROPERTY() TObjectPtr<UButton> CrimsonButton;
 	UPROPERTY() TObjectPtr<UButton> AzureButton;
+	UPROPERTY() TObjectPtr<UButton> QuestLordsButton;
+	UPROPERTY() TObjectPtr<UButton> QuestEchoesButton;
+	UPROPERTY() TObjectPtr<UTextBlock> QuestText;
 	UPROPERTY() TObjectPtr<UButton> EnterButton;
 };
