@@ -34,6 +34,24 @@ void AVSCombatGrayBoxPathTest::StartTest()
 		break;
 	}
 
+	// Own the fixture (shared-PIE-world hygiene): at some placements the map's
+	// enemies are already dead/destroyed by earlier tests — spawn a fresh one
+	// instead of failing, and remove it again in CleanUp.
+	if (Player.IsValid() && !Enemy.IsValid())
+	{
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		FVector Fwd = Player->GetActorForwardVector(); Fwd.Z = 0.f; Fwd = Fwd.GetSafeNormal();
+		if (Fwd.IsNearlyZero()) { Fwd = FVector::ForwardVector; }
+		if (AARPGEnemyCharacter* E = GetWorld()->SpawnActor<AARPGEnemyCharacter>(
+				AARPGEnemyCharacter::StaticClass(),
+				Player->GetActorLocation() + Fwd * 400.f, FRotator::ZeroRotator, Params))
+		{
+			Enemy = E;
+			SpawnedFixture = E;
+		}
+	}
+
 	if (!Player.IsValid() || !Enemy.IsValid())
 	{
 		FinishTest(EFunctionalTestResult::Failed, TEXT("Player or Enemy missing in the slice level"));
@@ -128,4 +146,14 @@ void AVSCombatGrayBoxPathTest::Tick(float DeltaSeconds)
 		}
 		return;
 	}
+}
+
+void AVSCombatGrayBoxPathTest::CleanUp()
+{
+	if (SpawnedFixture.IsValid())
+	{
+		SpawnedFixture->Destroy();
+		SpawnedFixture = nullptr;
+	}
+	Super::CleanUp();
 }

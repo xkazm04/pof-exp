@@ -15,6 +15,7 @@ public:
 
 	virtual void PrepareTest() override;
 	virtual void StartTest() override;
+	virtual void CleanUp() override;
 	virtual void Tick(float DeltaSeconds) override;
 
 private:
@@ -23,5 +24,7 @@ private:
 	FVector StartLocation = FVector::ZeroVector;
 	float EnemyStartHealth = 0.f;
 	TWeakObjectPtr<class AARPGEnemyCharacter> Enemy;
+	/** Enemy this test spawned itself (destroyed in CleanUp). */
+	TWeakObjectPtr<class AARPGEnemyCharacter> SpawnedFixture;
 	TWeakObjectPtr<class AARPGPlayerCharacter> Player;
 };

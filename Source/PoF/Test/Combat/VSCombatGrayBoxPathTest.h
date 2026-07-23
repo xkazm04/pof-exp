@@ -23,11 +23,14 @@ public:
 
 	virtual void PrepareTest() override;
 	virtual void StartTest() override;
+	virtual void CleanUp() override;
 	virtual void Tick(float DeltaSeconds) override;
 
 private:
 	TWeakObjectPtr<AARPGPlayerCharacter> Player;
 	TWeakObjectPtr<AARPGEnemyCharacter>  Enemy;
+	/** Enemy this test spawned itself (destroyed in CleanUp). */
+	TWeakObjectPtr<AARPGEnemyCharacter> SpawnedFixture;
 
 	int32 Phase = 0;
 	float PhaseTime = 0.f;

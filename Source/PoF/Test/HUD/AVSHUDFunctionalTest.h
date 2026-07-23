@@ -22,8 +22,12 @@ public:
 protected:
 	virtual void OnTestStarted() override;
 	virtual EARPGPhaseResult RunPhase(int32 PhaseIndex, FName PhaseName, float DeltaSeconds) override;
+	virtual void CleanUp() override;
 
 private:
 	UPROPERTY()
 	UVSHUDWidget* Widget = nullptr;
+
+	/** The enemy this test spawned as its own fixture (restored on CleanUp). */
+	TWeakObjectPtr<AARPGEnemyCharacter> SpawnedFixture;
 };

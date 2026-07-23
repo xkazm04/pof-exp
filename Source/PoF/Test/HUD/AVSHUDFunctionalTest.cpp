@@ -15,6 +15,20 @@ AVSHUDFunctionalTest::AVSHUDFunctionalTest()
 
 void AVSHUDFunctionalTest::OnTestStarted()
 {
+	// Own the fixture: spawn a fresh enemy instead of borrowing whatever the shared
+	// PIE world has left over. Sequential functional tests share the world, so at
+	// some placements (Test_Inventory) the map's enemies are already dead or gone —
+	// binding one of those left the health bar at 1.0 forever (the pre-existing red).
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	const FVector SpawnLoc = GetActorLocation() + FVector(300.f, 0.f, 100.f);
+	if (AARPGEnemyCharacter* E = GetWorld()->SpawnActor<AARPGEnemyCharacter>(
+			AARPGEnemyCharacter::StaticClass(), SpawnLoc, FRotator::ZeroRotator, Params))
+	{
+		Enemy = E; // GetFirstEnemy()/GetEnemyASC() now resolve THIS fixture
+		SpawnedFixture = E;
+	}
+
 	// Build the slice HUD widget exactly as AVSHUD does.
 	Widget = CreateWidget<UVSHUDWidget>(GetWorld(), UVSHUDWidget::StaticClass());
 	if (Widget)
@@ -93,4 +107,20 @@ EARPGPhaseResult AVSHUDFunctionalTest::RunPhase(int32 /*PhaseIndex*/, FName Phas
 	}
 
 	return EARPGPhaseResult::Advance;
+}
+
+void AVSHUDFunctionalTest::CleanUp()
+{
+	// Shared-PIE-world hygiene: remove the fixture so later tests inherit a clean map.
+	if (SpawnedFixture.IsValid())
+	{
+		SpawnedFixture->Destroy();
+		SpawnedFixture = nullptr;
+	}
+	if (Widget)
+	{
+		Widget->RemoveFromParent();
+		Widget = nullptr;
+	}
+	Super::CleanUp();
 }
