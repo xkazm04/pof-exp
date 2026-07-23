@@ -4,6 +4,9 @@
 #include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
+#include "GameFramework/PlayerController.h"
+#include "Blueprint/UserWidget.h"
+#include "UI/PreGameMenuWidget.h"
 
 bool UPoFFeatureLabSubsystem::ShouldPopulate(const FString& MapName)
 {
@@ -35,6 +38,16 @@ void UPoFFeatureLabSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	if (!ShouldPopulate(InWorld.GetMapName()))
 	{
 		return;
+	}
+
+	// Pre-game menu (UE mirror of the browser staging shell): saber choice + Enter.
+	if (APlayerController* PC = InWorld.GetFirstPlayerController())
+	{
+		if (UPreGameMenuWidget* Menu = CreateWidget<UPreGameMenuWidget>(PC, UPreGameMenuWidget::StaticClass()))
+		{
+			Menu->AddToViewport(30);
+			UE_LOG(LogTemp, Log, TEXT("[PreGameMenu] shown (built=%s)"), Menu->IsMenuBuilt() ? TEXT("yes") : TEXT("NO"));
+		}
 	}
 
 	// Anchor on the PlayerStart so the roster surrounds the player's spawn.
