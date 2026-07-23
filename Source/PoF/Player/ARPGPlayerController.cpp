@@ -228,15 +228,86 @@ void AARPGPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Add the mapping context to the local player's Enhanced Input subsystem.
-	if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
-		ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+	EnsureDefaultMappingContext();
+
+	// Load any saved key rebindings
+	LoadInputBindings();
+}
+
+void AARPGPlayerController::OnPossess(APawn* InPawn)
+{
+	Super::OnPossess(InPawn);
+
+	// BP-override-proof registration (see header note / FeatureLab F-key incident).
+	EnsureDefaultMappingContext();
+}
+
+void AARPGPlayerController::EnsureDefaultMappingContext()
+{
+	UEnhancedInputLocalPlayerSubsystem* Subsystem =
+		ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer());
+	if (!Subsystem)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Interaction] EnsureDefaultMappingContext: no EI subsystem yet (no LocalPlayer)"));
+		return;
+	}
+
+	if (!Subsystem->HasMappingContext(DefaultMappingContext))
 	{
 		Subsystem->AddMappingContext(DefaultMappingContext, 0);
 	}
 
-	// Load any saved key rebindings
-	LoadInputBindings();
+	// Diagnostic ground truth: which keys does Enhanced Input REALLY map to IA_Interact?
+	TArray<FKey> InteractKeys = Subsystem->QueryKeysMappedToAction(IA_Interact);
+	FString Keys;
+	for (const FKey& K : InteractKeys)
+	{
+		Keys += (Keys.IsEmpty() ? TEXT("") : TEXT(", ")) + K.ToString();
+	}
+	UE_LOG(LogTemp, Log, TEXT("[Interaction] DefaultMappingContext active; IA_Interact mapped to: %s"),
+		Keys.IsEmpty() ? TEXT("<NOTHING — binding dead>") : *Keys);
+
+	// Self-heal (FeatureLab F-key root cause — see header note): the active context
+	// (BP override = IMC_VerticalSlice) carries no Interact mapping, so synthesize one
+	// bound to the exact action instance the handlers use.
+	if (Keys.IsEmpty() && IA_Interact)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Interaction] active context '%s' (%d mappings) has NO Interact mapping — applying runtime F fixup"),
+			DefaultMappingContext ? *DefaultMappingContext->GetPathName() : TEXT("<null>"),
+			DefaultMappingContext ? DefaultMappingContext->GetMappings().Num() : 0);
+
+		if (!InteractFixupContext)
+		{
+			InteractFixupContext = NewObject<UInputMappingContext>(this, TEXT("IMC_InteractFixup"));
+			InteractFixupContext->MapKey(IA_Interact, EKeys::F);
+		}
+		if (!Subsystem->HasMappingContext(InteractFixupContext))
+		{
+			Subsystem->AddMappingContext(InteractFixupContext, 1);
+		}
+		// Query reads the REBUILT mapping table; the rebuild is normally deferred a
+		// tick, so flush it now to log ground truth instead of a stale snapshot.
+		Subsystem->RequestRebuildControlMappings(FModifyContextOptions(), EInputMappingRebuildType::RebuildWithFlush);
+
+		TArray<FKey> Healed = Subsystem->QueryKeysMappedToAction(IA_Interact);
+		UE_LOG(LogTemp, Log, TEXT("[Interaction] after fixup IA_Interact mapped to: %s"),
+			Healed.Num() ? *Healed[0].ToString() : TEXT("<STILL NOTHING>"));
+
+		// Possess-time queries can read a pre-first-tick snapshot; log post-tick truth.
+		FTimerHandle TruthTimer;
+		GetWorldTimerManager().SetTimer(TruthTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			if (UEnhancedInputLocalPlayerSubsystem* S =
+				ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+			{
+				TArray<FKey> K = S->QueryKeysMappedToAction(IA_Interact);
+				UE_LOG(LogTemp, Log, TEXT("[Interaction] post-tick truth: fixupApplied=%s IA_Interact mapped to: %s"),
+					S->HasMappingContext(InteractFixupContext) ? TEXT("yes") : TEXT("NO"),
+					K.Num() ? *K[0].ToString() : TEXT("<NOTHING>"));
+			}
+		}), 1.0f, false);
+	}
 }
 
 void AARPGPlayerController::SetupInputComponent()

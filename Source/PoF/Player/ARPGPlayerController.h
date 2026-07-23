@@ -131,8 +131,31 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void OnPossess(APawn* InPawn) override;
 	virtual void SetupInputComponent() override;
 	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
+
+	/**
+	 * Idempotently register DefaultMappingContext with the Enhanced Input subsystem
+	 * and log the keys live-mapped to IA_Interact. Called from BeginPlay AND
+	 * OnPossess: a Blueprint child (BP_VSPlayerController) that overrides Event
+	 * BeginPlay without a parent call silently skips the C++ BeginPlay — which
+	 * dead-ends every keyboard binding (the FeatureLab F-key incident). OnPossess
+	 * is pure C++ here, so the context now lands regardless of BP graph shape.
+	 */
+	void EnsureDefaultMappingContext();
+
+	/**
+	 * Runtime fixup context (FeatureLab F-key root cause): BP_VSPlayerController
+	 * overrides DefaultMappingContext to /Game/Input/IMC_VerticalSlice, which has
+	 * NO Interact mapping — so hardware F was dead while WASD/attack worked. When
+	 * IA_Interact resolves to zero keys, we synthesize this context (F → IA_Interact,
+	 * the SAME action instance the handlers are bound to) and add it at priority 1.
+	 * The durable fix is adding the mapping to the IMC asset; this keeps interact
+	 * alive regardless of asset drift, and logs loudly whenever it engages.
+	 */
+	UPROPERTY(Transient)
+	TObjectPtr<UInputMappingContext> InteractFixupContext;
 
 	// --- Input Actions (assign in BP or constructor) ---
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
