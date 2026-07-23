@@ -4,6 +4,9 @@
 #include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
+#include "Sound/AmbientSound.h"
+#include "Components/AudioComponent.h"
+#include "Sound/SoundBase.h"
 #include "GameFramework/PlayerController.h"
 #include "Blueprint/UserWidget.h"
 #include "UI/PreGameMenuWidget.h"
@@ -79,6 +82,27 @@ void UPoFFeatureLabSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 				}
 			});
 		}
+	}
+
+	// Generated galactic ambience (ambient catalog: ambient-galactic-arena) — the
+	// REAL ElevenLabs bed imported as a SoundWave; honest log when absent.
+	if (USoundBase* Bed = LoadObject<USoundBase>(nullptr,
+			TEXT("/Game/Generated/Audio/GalacticArenaAmbience.GalacticArenaAmbience")))
+	{
+		AAmbientSound* Amb = InWorld.SpawnActor<AAmbientSound>();
+		if (Amb && Amb->GetAudioComponent())
+		{
+			UAudioComponent* AC = Amb->GetAudioComponent();
+			AC->SetSound(Bed);
+			AC->bAllowSpatialization = false; // a bed, not a positional emitter
+			AC->VolumeMultiplier = 0.6f;
+			AC->Play();
+			UE_LOG(LogTemp, Log, TEXT("[FeatureLab] galactic ambience playing (%s)"), *Bed->GetName());
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("[FeatureLab] no generated ambience asset - silent lab"));
 	}
 
 	// Anchor on the PlayerStart so the roster surrounds the player's spawn.
