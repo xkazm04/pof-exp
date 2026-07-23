@@ -414,10 +414,18 @@ TSubclassOf<UGameplayAbility> AARPGPlayerCharacter::GetSlotAbility(int32 SlotInd
 
 void AARPGPlayerCharacter::PerformInteraction()
 {
-	if (!bIsAlive) return;
+	if (!bIsAlive)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Interaction] blocked: bIsAlive=false"));
+		return;
+	}
 
 	AActor* Target = InteractionTarget.Get();
-	if (!Target) return;
+	if (!Target)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Interaction] no target in range (scan empty)"));
+		return;
+	}
 
 	UE_LOG(LogTemp, Log, TEXT("[Interaction] Interacting with: %s"), *Target->GetName());
 
@@ -466,13 +474,18 @@ void AARPGPlayerCharacter::PerformInteraction()
 
 		if (DialogueComp->StartDialogue(this))
 		{
+			UE_LOG(LogTemp, Log, TEXT("[Interaction] dialogue STARTED with %s"), *Target->GetName());
 			// Show dialogue UI via HUD
-			if (APlayerController* PC = Cast<APlayerController>(GetController()))
+			APlayerController* PC = Cast<APlayerController>(GetController());
+			AARPGHUD* HUD = PC ? Cast<AARPGHUD>(PC->GetHUD()) : nullptr;
+			if (HUD)
 			{
-				if (AARPGHUD* HUD = Cast<AARPGHUD>(PC->GetHUD()))
-				{
-					HUD->ShowDialogue(DialogueComp);
-				}
+				HUD->ShowDialogue(DialogueComp);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[Interaction] dialogue started but HUD is %s - NO UI will show"),
+					PC && PC->GetHUD() ? *PC->GetHUD()->GetClass()->GetName() : TEXT("null"));
 			}
 		}
 		return;

@@ -338,7 +338,10 @@ void AARPGPlayerController::HandleLook(const FInputActionValue& Value)
 
 void AARPGPlayerController::HandleInteract(const FInputActionValue& Value)
 {
-	if (AARPGPlayerCharacter* PlayerChar = Cast<AARPGPlayerCharacter>(GetPawn()))
+	AARPGPlayerCharacter* PlayerChar = Cast<AARPGPlayerCharacter>(GetPawn());
+	UE_LOG(LogTemp, Log, TEXT("[Interaction] HandleInteract fired (pawn=%s cast=%s)"),
+		GetPawn() ? *GetPawn()->GetName() : TEXT("null"), PlayerChar ? TEXT("ok") : TEXT("FAILED"));
+	if (PlayerChar)
 	{
 		PlayerChar->PerformInteraction();
 	}

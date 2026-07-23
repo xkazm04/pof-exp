@@ -14,10 +14,25 @@
 #include "Styling/CoreStyle.h"
 #include "Blueprint/WidgetTree.h"
 
+bool UDialogueWidget::Initialize()
+{
+	if (!Super::Initialize())
+	{
+		return false;
+	}
+	// Build the C++ tree BEFORE the Slate widget is constructed — NativeConstruct is
+	// too late (TakeWidget has already baked the then-empty root, so the panel would
+	// silently render as nothing). A UMG BP subclass with a designed tree keeps it.
+	if (WidgetTree && !WidgetTree->RootWidget && !HasAnyFlags(RF_ClassDefaultObject))
+	{
+		BuildLayout();
+	}
+	return true;
+}
+
 void UDialogueWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
-	BuildLayout();
 	SetVisibility(ESlateVisibility::Collapsed);
 }
 
@@ -89,6 +104,14 @@ void UDialogueWidget::BindToDialogue(UARPGDialogueComponent* DialogueComp)
 	DialogueComp->OnDialogueEnded.AddDynamic(this, &UDialogueWidget::OnDialogueEnded);
 
 	SetVisibility(ESlateVisibility::Visible);
+
+	// StartDialogue broadcasts the FIRST node before the HUD binds this widget —
+	// without a catch-up refresh the panel shows visible but empty (it missed the
+	// only node event). Pull the current node explicitly.
+	if (DialogueComp->IsInDialogue() && DialogueComp->GetCurrentNodeIndex() >= 0)
+	{
+		RefreshNode(DialogueComp->GetCurrentNodeIndex(), DialogueComp->GetCurrentNode());
+	}
 }
 
 void UDialogueWidget::UnbindFromDialogue()

@@ -522,6 +522,17 @@ void UScenarioController::ApplyInputs()
                 EI->InjectInputForAction(IA, FInputActionValue(In.Value), {}, {});
             }
         }
+        // Interact directly (same production function F triggers) — Boolean-key
+        // injection can't reliably fire EI actions (documented gap below), so the
+        // scenario drives PerformInteraction itself to test scan→dialogue→HUD.
+        if (In.Event == TEXT("interact") && bNow && !bWas)
+        {
+            if (AARPGPlayerCharacter* PChar = Cast<AARPGPlayerCharacter>(PC->GetPawn()))
+            {
+                PChar->PerformInteraction();
+            }
+        }
+
         // Non-input event on the rising edge (activate an ability directly — bypasses the
         // Boolean-key injection fidelity gap, so the ability's EFFECT is what we observe).
         if (In.Event == TEXT("activate_ability") && bNow && !bWas)

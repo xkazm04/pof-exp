@@ -54,10 +54,14 @@ void AARPGHUD::BeginPlay()
 		if (NotificationWidget) NotificationWidget->AddToViewport(50);
 	}
 
-	// Dialogue widget (hidden until dialogue starts)
-	if (DialogueWidgetClass)
+	// Dialogue widget (hidden until dialogue starts). UDialogueWidget builds its own
+	// tree in C++ (NativeConstruct), so when no BP class is configured — e.g. the
+	// FeatureLab's default HUD — fall back to the C++ class instead of silently
+	// having no dialog UI at all.
 	{
-		DialogueWidget = CreateWidget<UDialogueWidget>(PC, DialogueWidgetClass);
+		const TSubclassOf<UDialogueWidget> WidgetCls =
+			DialogueWidgetClass ? DialogueWidgetClass : TSubclassOf<UDialogueWidget>(UDialogueWidget::StaticClass());
+		DialogueWidget = CreateWidget<UDialogueWidget>(PC, WidgetCls);
 		if (DialogueWidget) DialogueWidget->AddToViewport(20);
 	}
 
@@ -374,6 +378,10 @@ void AARPGHUD::SetHUDVisible(bool bVisible)
 
 void AARPGHUD::ShowDialogue(UARPGDialogueComponent* DialogueComp)
 {
+	if (!DialogueWidget)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Interaction] ShowDialogue: DialogueWidget is null (DialogueWidgetClass unset on this HUD) - dialog has no UI"));
+	}
 	if (DialogueWidget && DialogueComp)
 	{
 		DialogueWidget->BindToDialogue(DialogueComp);

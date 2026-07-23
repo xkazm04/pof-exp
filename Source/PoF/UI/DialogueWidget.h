@@ -31,6 +31,7 @@ public:
 	void UnbindFromDialogue();
 
 protected:
+	virtual bool Initialize() override;
 	virtual void NativeConstruct() override;
 
 private:
